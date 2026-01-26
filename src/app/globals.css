@@ -1,26 +1,167 @@
 @import "tailwindcss";
 
 :root {
+  /* Base Colors - Neutrals */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #424242; /* Dark Gray */
+  
+  /* Primary: Green (Dopamine Core) */
+  --primary: #2E7D32; /* Green 800 - Deep & Accessible */
+  --primary-foreground: #ffffff;
+  
+  /* Dopamine Accents */
+  --accent-orange: #FF9800;
+  --accent-purple: #9C27B0;
+  --accent-blue: #2196F3;
+  
+  /* Secondary: Lighter Green for softer elements */
+  --secondary: #E8F5E9; /* Green 50 */
+  --secondary-foreground: #1B5E20; /* Green 900 */
+  
+  --accent: #F5F5F5; /* Light Gray for neutral accents/hovers */
+  --accent-foreground: #2E7D32; /* Green text on hover */
+
+  /* Standard UI Colors */
+  --muted: #F5F5F5; /* Light Gray */
+  --muted-foreground: #757575; /* Gray 600 */
+  
+  --card: #ffffff;
+  --card-foreground: #424242;
+  
+  --popover: #ffffff;
+  --popover-foreground: #424242;
+  
+  --border: #E0E0E0; /* Gray 300 */
+  --input: #E0E0E0;
+  --ring: #43A047; /* Green 600 */
+
+  --destructive: #d32f2f; /* Red 700 */
+  --destructive-foreground: #ffffff;
+
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Mode Adaptations */
+    --background: #121212; /* Very Dark Gray, not pure black */
+    --foreground: #F5F5F5; /* Light Gray */
+    
+    --primary: #43A047; /* Green 600 - Brighter for dark mode */
+    --primary-foreground: #ffffff;
+
+    /* Accents remain vibrant */
+    --accent-orange: #FFA726; /* Orange 400 */
+    --accent-purple: #AB47BC; /* Purple 400 */
+    --accent-blue: #42A5F5; /* Blue 400 */
+
+    --secondary: #1B5E20; /* Green 900 */
+    --secondary-foreground: #E8F5E9; /* Green 50 */
+    
+    --muted: #212121; /* Gray 900 */
+    --muted-foreground: #BDBDBD; /* Gray 400 */
+    
+    --card: #1E1E1E; /* Gray 900 */
+    --card-foreground: #F5F5F5;
+    
+    --popover: #1E1E1E;
+    --popover-foreground: #F5F5F5;
+    
+    --border: #424242;
+    --input: #424242;
+    --ring: #2E7D32; /* Green 800 */
+    
+    --destructive: #b71c1c;
+    --destructive-foreground: #F5F5F5;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  
+  /* Mapping Accents to Tailwind classes */
+  --color-dopamine-orange: var(--accent-orange);
+  --color-dopamine-purple: var(--accent-purple);
+  --color-dopamine-blue: var(--accent-blue);
+  
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fade-in 0.5s ease-out;
+  --animate-slide-up: slide-up 0.5s ease-out;
+  --animate-bounce-slight: bounce-slight 2s infinite;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  @keyframes accordion-down {
+    from { height: 0 }
+    to { height: var(--radix-accordion-content-height) }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height) }
+    to { height: 0 }
+  }
+  @keyframes fade-in {
+    from { opacity: 0 }
+    to { opacity: 1 }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(10px); opacity: 0 }
+    to { transform: translateY(0); opacity: 1 }
+  }
+  @keyframes bounce-slight {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-background text-foreground antialiased;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  scroll-behavior: smooth;
+}
+
+/* Glassmorphism Utilities with Green Tint */
+.glass {
+  @apply bg-white/80 dark:bg-[#121212]/80 backdrop-blur-md border border-white/40 dark:border-white/10;
+}
+
+.glass-green {
+  @apply bg-[#E8F5E9]/60 dark:bg-[#1B5E20]/30 backdrop-blur-md border border-[#43A047]/20;
+}
+
+/* Dopamine Gradients */
+.bg-gradient-dopamine {
+  @apply bg-gradient-to-r from-[var(--primary)] to-[var(--accent-blue)];
+}
+
+.text-gradient-dopamine {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-[var(--primary)] to-[var(--accent-blue)];
 }

@@ -199,14 +199,14 @@ export default function RecommendationsPage() {
     }
   };
 
-  const evaluateMarketItem = async () => {
+  const handleEvaluateMarketItem = async () => {
     if (!selectedImage || !newItem.title) return toast.error('请上传图片并填写物品名称');
 
     setIsEvaluatingItem(true);
     
     try {
       const evaluation = await evaluateMarketItem(selectedImage, newItem.title);
-      setItemEvaluation(evaluation);
+      setItemEvaluation(evaluation ? String(evaluation) : null);
     } catch (error) {
       console.error('Failed to evaluate market item:', error);
       toast.error('物品评估失败，请重试');
@@ -410,7 +410,7 @@ export default function RecommendationsPage() {
                          )}
                          {selectedImage && (
                            <Button 
-                             onClick={evaluateMarketItem} 
+                             onClick={handleEvaluateMarketItem} 
                              variant="default"
                              disabled={isEvaluatingItem}
                              loading={isEvaluatingItem}

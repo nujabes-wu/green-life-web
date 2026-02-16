@@ -49,7 +49,7 @@ export default function EcoAdvisorPage() {
       role: 'user',
       content: inputValue.trim(),
       timestamp: new Date(),
-      imageUrl: imageUrl,
+      imageUrl: imageUrl || undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);

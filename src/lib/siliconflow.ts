@@ -6,7 +6,7 @@ export class SiliconFlowClient {
   private baseUrl: string;
 
   constructor(apiKey?: string, baseUrl?: string) {
-    this.apiKey = apiKey || API_KEY;
+    this.apiKey = apiKey ?? API_KEY ?? '';
     this.baseUrl = baseUrl || BASE_URL;
   }
 

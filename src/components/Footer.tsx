@@ -11,9 +11,6 @@ export function Footer() {
               <Leaf className="h-6 w-6 text-primary" />
               <span>绿色生活</span>
             </Link>
-            <p className="text-sm text-slate-400 leading-relaxed">
-              致力于通过科技手段帮助每个人减少碳足迹，推动可持续发展的未来。
-            </p>
           </div>
           
           <div>
@@ -22,25 +19,25 @@ export function Footer() {
               <li><Link href="/calculator" className="hover:text-primary transition-colors">碳足迹计算器</Link></li>
               <li><Link href="/recommendations" className="hover:text-primary transition-colors">绿色消费建议</Link></li>
               <li><Link href="/ai-recycle" className="hover:text-primary transition-colors">AI 智能回收</Link></li>
+              <li><Link href="/eco-advisor" className="hover:text-primary transition-colors">AI 环保顾问</Link></li>
             </ul>
           </div>
           
           <div>
             <h3 className="font-semibold text-white mb-4">资源</h3>
             <ul className="space-y-2 text-sm">
-              <li><Link href="#" className="hover:text-primary transition-colors">环保知识库</Link></li>
-              <li><Link href="#" className="hover:text-primary transition-colors">API 文档</Link></li>
-              <li><Link href="#" className="hover:text-primary transition-colors">隐私政策</Link></li>
-              <li><Link href="#" className="hover:text-primary transition-colors">关于我们</Link></li>
+              <li><Link href="/knowledge-base" className="hover:text-primary transition-colors">环保知识库</Link></li>
+              <li><Link href="/privacy-policy" className="hover:text-primary transition-colors">隐私政策</Link></li>
+              <li><Link href="/about" className="hover:text-primary transition-colors">关于我们</Link></li>
             </ul>
           </div>
           
           <div>
             <h3 className="font-semibold text-white mb-4">关注我们</h3>
             <div className="flex gap-4">
-              <Link href="#" className="hover:text-primary transition-colors"><Github className="h-5 w-5" /></Link>
-              <Link href="#" className="hover:text-primary transition-colors"><Twitter className="h-5 w-5" /></Link>
-              <Link href="#" className="hover:text-primary transition-colors"><Instagram className="h-5 w-5" /></Link>
+              <Link href="https://github.com/nujabes-wu" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+                <Github className="h-5 w-5" />
+              </Link>
             </div>
           </div>
         </div>

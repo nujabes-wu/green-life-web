@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RotateCcw, Car, Zap, Utensils, Share2, BarChart } from 'lucide-react';
+import { RotateCcw, Car, Zap, Utensils, Share2, BarChart, Brain, FileText } from 'lucide-react';
 import { calculateCarbonFootprint, CalculationInput, CarbonResult } from '@/lib/calculator/engine';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -13,6 +13,8 @@ import { EnergyForm } from '@/components/calculator/EnergyForm';
 import { ConsumptionForm } from '@/components/calculator/ConsumptionForm';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
+import { generateReductionTips } from "@/lib/ai/chat";
+import { generateEcoReport } from "@/lib/ai/text";
 
 const COLORS = ['#2E7D32', '#FF9800', '#2196F3']; // Green, Orange, Blue
 
@@ -20,6 +22,11 @@ export default function CalculatorPage() {
   const [activeTab, setActiveTab] = useState('transport');
   const [result, setResult] = useState<CarbonResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [reductionTips, setReductionTips] = useState<string | null>(null);
+  const [ecoReport, setEcoReport] = useState<string | null>(null);
+  const [isGeneratingTips, setIsGeneratingTips] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [resultTab, setResultTab] = useState('summary');
 
   // Initial State
   const initialFormState: CalculationInput = {
@@ -104,8 +111,45 @@ export default function CalculatorPage() {
 
   const resetForm = () => {
     setResult(null);
+    setReductionTips(null);
+    setEcoReport(null);
     setFormData(initialFormState);
     setActiveTab('transport');
+    setResultTab('summary');
+  };
+
+  const generateTips = async () => {
+    if (!result) return;
+
+    setIsGeneratingTips(true);
+    
+    try {
+      const tips = await generateReductionTips(result);
+      setReductionTips(tips);
+      setResultTab('tips');
+    } catch (error) {
+      console.error('Failed to generate reduction tips:', error);
+      toast.error('生成减排建议失败，请重试');
+    } finally {
+      setIsGeneratingTips(false);
+    }
+  };
+
+  const generateReport = async () => {
+    if (!result) return;
+
+    setIsGeneratingReport(true);
+    
+    try {
+      const report = await generateEcoReport(result);
+      setEcoReport(report);
+      setResultTab('report');
+    } catch (error) {
+      console.error('Failed to generate eco report:', error);
+      toast.error('生成环保报告失败，请重试');
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   const getComment = (val: number) => {
@@ -193,54 +237,111 @@ export default function CalculatorPage() {
                   <CardHeader>
                     <CardTitle className="flex justify-between items-center">
                       <span>📉 年度碳排放分析</span>
-                      <Button variant="ghost" size="sm">
-                        <Share2 className="mr-2 h-4 w-4" /> 分享
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={generateTips}
+                          disabled={isGeneratingTips || isGeneratingReport}
+                          loading={isGeneratingTips}
+                        >
+                          <Brain className="mr-2 h-4 w-4" /> 减排建议
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={generateReport}
+                          disabled={isGeneratingReport || isGeneratingTips}
+                          loading={isGeneratingReport}
+                        >
+                          <FileText className="mr-2 h-4 w-4" /> 环保报告
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <Share2 className="mr-2 h-4 w-4" /> 分享
+                        </Button>
+                      </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-6">
-                      <motion.div 
-                        initial={{ scale: 0.5 }}
-                        animate={{ scale: 1 }}
-                        className="text-5xl font-extrabold text-primary mb-2"
-                      >
-                        {result.total} <span className="text-xl font-normal text-muted-foreground">kg CO₂e</span>
-                      </motion.div>
-                      <p className={`font-medium mb-8 ${getComment(result.total).color}`}>
-                        {getComment(result.total).text}
-                      </p>
+                    <Tabs value={resultTab} onValueChange={setResultTab} className="w-full">
+                      <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="summary">分析总结</TabsTrigger>
+                        <TabsTrigger value="tips">减排建议</TabsTrigger>
+                        <TabsTrigger value="report">环保报告</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="summary" className="mt-4">
+                        <div className="text-center py-6">
+                          <motion.div 
+                            initial={{ scale: 0.5 }}
+                            animate={{ scale: 1 }}
+                            className="text-5xl font-extrabold text-primary mb-2"
+                          >
+                            {result.total} <span className="text-xl font-normal text-muted-foreground">kg CO₂e</span>
+                          </motion.div>
+                          <p className={`font-medium mb-8 ${getComment(result.total).color}`}>
+                            {getComment(result.total).text}
+                          </p>
 
-                      <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={80}
-                              fill="#8884d8"
-                              paddingAngle={5}
-                              dataKey="value"
-                            >
-                              {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                            <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-foreground font-bold">
-                               构成
-                            </text>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="flex justify-center gap-4 text-sm text-muted-foreground mt-4">
-                         <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-[#2E7D32] mr-1"></div> 交通</div>
-                         <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-[#FF9800] mr-1"></div> 能源</div>
-                         <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-[#2196F3] mr-1"></div> 消费</div>
-                      </div>
-                    </div>
+                          <div className="h-[250px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={chartData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={60}
+                                  outerRadius={80}
+                                  fill="#8884d8"
+                                  paddingAngle={5}
+                                  dataKey="value"
+                                >
+                                  {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip />
+                                <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-foreground font-bold">
+                                   构成
+                                </text>
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="flex justify-center gap-4 text-sm text-muted-foreground mt-4">
+                             <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-[#2E7D32] mr-1"></div> 交通</div>
+                             <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-[#FF9800] mr-1"></div> 能源</div>
+                             <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-[#2196F3] mr-1"></div> 消费</div>
+                          </div>
+                        </div>
+                      </TabsContent>
+                      <TabsContent value="tips" className="mt-4">
+                        <div className="bg-white/60 dark:bg-black/20 p-6 rounded-xl text-left border border-white/20 shadow-sm">
+                          {reductionTips ? (
+                            <div className="whitespace-pre-line text-muted-foreground leading-relaxed">
+                              {reductionTips}
+                            </div>
+                          ) : (
+                            <div className="text-center py-10 text-muted-foreground">
+                              <p>减排建议不可用</p>
+                              <p className="text-sm mt-2">请点击上方「减排建议」按钮生成</p>
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+                      <TabsContent value="report" className="mt-4">
+                        <div className="bg-white/60 dark:bg-black/20 p-6 rounded-xl text-left border border-white/20 shadow-sm">
+                          {ecoReport ? (
+                            <div className="whitespace-pre-line text-muted-foreground leading-relaxed">
+                              {ecoReport}
+                            </div>
+                          ) : (
+                            <div className="text-center py-10 text-muted-foreground">
+                              <p>环保报告不可用</p>
+                              <p className="text-sm mt-2">请点击上方「环保报告」按钮生成</p>
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
                   </CardContent>
                 </Card>
               </motion.div>

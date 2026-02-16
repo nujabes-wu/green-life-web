@@ -3,12 +3,15 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, Loader2, CheckCircle2, AlertTriangle, Trash2, HelpCircle, Image as ImageIcon } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload, Loader2, CheckCircle2, AlertTriangle, Trash2, HelpCircle, Image as ImageIcon, Brain, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgl';
 import '@tensorflow/tfjs-backend-cpu';
 import * as mobilenet from '@tensorflow-models/mobilenet';
+import { analyzeRecyclingItem } from "@/lib/ai/image";
+import { getEcoAdvice } from "@/lib/ai/chat";
 
 // 定义回收分类接口
 interface RecycleCategory {
@@ -18,6 +21,10 @@ interface RecycleCategory {
   advice: string;
   icon: ReactNode;
   probability?: number;
+  material?: string;
+  environmentalImpact?: string;
+  recyclingLocations?: string[];
+  detailedAnalysis?: string;
 }
 
 // 定义回收分类映射
@@ -41,7 +48,10 @@ export default function AIRecyclePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [modelLoading, setModelLoading] = useState(true);
   const [result, setResult] = useState<RecycleCategory | null>(null);
+  const [detailedAnalysis, setDetailedAnalysis] = useState<string | null>(null);
   const [model, setModel] = useState<mobilenet.MobileNet | null>(null);
+  const [useAdvancedAI, setUseAdvancedAI] = useState(false);
+  const [activeTab, setActiveTab] = useState('analysis');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
@@ -94,50 +104,110 @@ export default function AIRecyclePage() {
   };
 
   const analyzeImage = async () => {
-    if (!imagePreview || !model || !imageRef.current) return;
+    if (!imagePreview || (!model && !useAdvancedAI)) return;
 
     setIsAnalyzing(true);
+    setDetailedAnalysis(null);
     
     try {
-      // 1. 获取预测结果
-      const predictions = await model.classify(imageRef.current);
-      console.log('Predictions:', predictions);
-
-      if (predictions && predictions.length > 0) {
-        // 2. 匹配分类
-        let match = null;
-        let detectedName = predictions[0].className;
-
-        // 遍历预测结果寻找匹配
-        for (const pred of predictions) {
-          const names = pred.className.toLowerCase().split(', ');
-          for (const name of names) {
-             // 简单的关键词匹配
-             for (const key in RECYCLE_MAP) {
-                if (name.includes(key)) {
-                   match = RECYCLE_MAP[key];
-                   detectedName = match.name; // 使用中文名
-                   break;
-                }
-             }
-             if (match) break;
-          }
-          if (match) break;
+      if (useAdvancedAI) {
+        // 使用硅基流动大模型进行分析
+        const analysisResult = await analyzeRecyclingItem(imagePreview);
+        setDetailedAnalysis(analysisResult);
+        
+        // 打印分析结果到控制台，用于调试
+        console.log('Raw analysis result:', analysisResult);
+        
+        // 解析结构化分析结果（更灵活的匹配）
+        const itemNameMatch = analysisResult.match(/物品名称[:：]\s*([^\n]+)/);
+        const recycleTypeMatch = analysisResult.match(/分类类型[:：]\s*([^\n]+)/);
+        const recycleColorMatch = analysisResult.match(/分类颜色[:：]\s*([^\n]+)/);
+        const adviceMatch = analysisResult.match(/【回收建议】[\s\S]*?预处理方法[:：]\s*([^\n]+)[\s\S]*?投放方式[:：]\s*([^\n]+)/);
+        
+        const itemName = itemNameMatch ? itemNameMatch[1].trim().replace(/[\[\]]/g, '') : '未知物品';
+        const recycleType = recycleTypeMatch ? recycleTypeMatch[1].trim().replace(/[\[\]]/g, '') : '需人工判断';
+        const recycleColor = recycleColorMatch ? recycleColorMatch[1].trim().replace(/[\[\]]/g, '') : '';
+        
+        // 生成回收建议
+        let advice = '请参考下方详细分析中的回收建议';
+        if (adviceMatch) {
+          advice = `预处理：${adviceMatch[1].trim().replace(/[\[\]]/g, '')}\n投放：${adviceMatch[2].trim().replace(/[\[\]]/g, '')}`;
         }
-
-        // 3. 设置结果
-        if (match) {
-          setResult({ ...match, probability: predictions[0].probability });
-        } else {
-           // 未匹配到预定义规则，显示原始识别结果但标记为未知
-           setResult({
-              ...UNKNOWN_CATEGORY,
-              name: `可能是: ${detectedName.split(',')[0]}`,
-              probability: predictions[0].probability
-           });
+        
+        // 打印匹配结果到控制台
+        console.log('Extracted info:', {
+          itemName,
+          recycleType,
+          recycleColor,
+          advice
+        });
+        
+        // 根据回收类型设置颜色和图标
+        let color = 'bg-gray-100 text-gray-700 border-gray-200';
+        let icon = <HelpCircle className="h-6 w-6 text-gray-600" />;
+        
+        if (recycleType.includes('可回收')) {
+          color = 'bg-blue-100 text-blue-700 border-blue-200';
+          icon = <CheckCircle2 className="h-6 w-6 text-blue-600" />;
+        } else if (recycleType.includes('厨余') || recycleType.includes('易腐')) {
+          color = 'bg-green-100 text-green-700 border-green-200';
+          icon = <Trash2 className="h-6 w-6 text-green-600" />;
+        } else if (recycleType.includes('有害')) {
+          color = 'bg-red-100 text-red-700 border-red-200';
+          icon = <AlertTriangle className="h-6 w-6 text-red-600" />;
         }
+        
+        setResult({
+          name: itemName,
+          type: recycleType,
+          color,
+          advice: advice,
+          icon,
+          detailedAnalysis: analysisResult
+        });
       } else {
-        setResult(UNKNOWN_CATEGORY);
+        // 使用本地模型进行分析
+        if (!model || !imageRef.current) return;
+        
+        const predictions = await model.classify(imageRef.current);
+        console.log('Predictions:', predictions);
+
+        if (predictions && predictions.length > 0) {
+          // 2. 匹配分类
+          let match = null;
+          let detectedName = predictions[0].className;
+
+          // 遍历预测结果寻找匹配
+          for (const pred of predictions) {
+            const names = pred.className.toLowerCase().split(', ');
+            for (const name of names) {
+               // 简单的关键词匹配
+               for (const key in RECYCLE_MAP) {
+                  if (name.includes(key)) {
+                     match = RECYCLE_MAP[key];
+                     detectedName = match.name; // 使用中文名
+                     break;
+                  }
+               }
+               if (match) break;
+            }
+            if (match) break;
+          }
+
+          // 3. 设置结果
+          if (match) {
+            setResult({ ...match, probability: predictions[0].probability });
+          } else {
+             // 未匹配到预定义规则，显示原始识别结果但标记为未知
+             setResult({
+                ...UNKNOWN_CATEGORY,
+                name: `可能是: ${detectedName.split(',')[0]}`,
+                probability: predictions[0].probability
+             });
+          }
+        } else {
+          setResult(UNKNOWN_CATEGORY);
+        }
       }
 
     } catch (error) {
@@ -227,14 +297,27 @@ export default function AIRecyclePage() {
               </AnimatePresence>
             </div>
             
+            <div className="flex items-center justify-between mt-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={useAdvancedAI} 
+                  onChange={(e) => setUseAdvancedAI(e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Brain className="h-4 w-4" /> 使用高级AI分析
+                </span>
+              </label>
+            </div>
             <Button 
               className="w-full mt-6" 
               size="lg"
               onClick={analyzeImage} 
-              disabled={!imagePreview || isAnalyzing || modelLoading}
+              disabled={!imagePreview || isAnalyzing || (!useAdvancedAI && modelLoading)}
               loading={isAnalyzing}
             >
-              {modelLoading ? "模型加载中..." : (isAnalyzing ? "正在智能分析..." : "开始识别")}
+              {!useAdvancedAI && modelLoading ? "模型加载中..." : (isAnalyzing ? "正在智能分析..." : "开始识别")}
             </Button>
           </CardContent>
         </Card>
@@ -254,35 +337,59 @@ export default function AIRecyclePage() {
                   <CardHeader>
                     <CardTitle>🔍 识别结果</CardTitle>
                   </CardHeader>
-                  <CardContent className="flex flex-col items-center text-center pt-4">
-                    <motion.div 
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                      className="mb-6 p-4 bg-white dark:bg-slate-800 rounded-full shadow-md"
-                    >
-                      {result.icon}
-                    </motion.div>
-                    
-                    <h3 className="text-3xl font-bold mb-3 text-foreground">{result.name}</h3>
-                    
-                    {result.probability && (
-                       <p className="text-xs text-muted-foreground mb-4">
-                          AI 置信度: {(result.probability * 100).toFixed(1)}%
-                       </p>
-                    )}
-                    
-                    <div className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-8 border ${result.color}`}>
-                      {result.type}
-                    </div>
-                    
-                    <div className="w-full bg-white/60 dark:bg-black/20 p-6 rounded-xl text-left border border-white/20 shadow-sm">
-                      <p className="font-semibold mb-2 flex items-center text-foreground">
-                        <CheckCircle2 className="h-4 w-4 mr-2 text-primary" /> 
-                        投放建议：
-                      </p>
-                      <p className="text-muted-foreground leading-relaxed pl-6">{result.advice}</p>
-                    </div>
+                  <CardContent className="pt-4">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="analysis">分析结果</TabsTrigger>
+                        <TabsTrigger value="details">详细分析</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="analysis" className="mt-4">
+                        <div className="flex flex-col items-center text-center">
+                          <motion.div 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                            className="mb-6 p-4 bg-white dark:bg-slate-800 rounded-full shadow-md"
+                          >
+                            {result.icon}
+                          </motion.div>
+                          
+                          <h3 className="text-3xl font-bold mb-3 text-foreground">{result.name}</h3>
+                          
+                          {result.probability && (
+                             <p className="text-xs text-muted-foreground mb-4">
+                                AI 置信度: {(result.probability * 100).toFixed(1)}%
+                             </p>
+                          )}
+                          
+                          <div className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-8 border ${result.color}`}>
+                            {result.type}
+                          </div>
+                          
+                          <div className="w-full bg-white/60 dark:bg-black/20 p-6 rounded-xl text-left border border-white/20 shadow-sm">
+                            <p className="font-semibold mb-2 flex items-center text-foreground">
+                              <CheckCircle2 className="h-4 w-4 mr-2 text-primary" /> 
+                              投放建议：
+                            </p>
+                            <p className="text-muted-foreground leading-relaxed pl-6">{result.advice}</p>
+                          </div>
+                        </div>
+                      </TabsContent>
+                      <TabsContent value="details" className="mt-4">
+                        <div className="w-full bg-white/60 dark:bg-black/20 p-6 rounded-xl text-left border border-white/20 shadow-sm">
+                          {result.detailedAnalysis ? (
+                            <div className="whitespace-pre-line text-muted-foreground leading-relaxed">
+                              {result.detailedAnalysis}
+                            </div>
+                          ) : (
+                            <div className="text-center py-10 text-muted-foreground">
+                              <p>详细分析不可用</p>
+                              <p className="text-sm mt-2">请使用高级AI分析获取详细信息</p>
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
                   </CardContent>
                 </Card>
               </motion.div>

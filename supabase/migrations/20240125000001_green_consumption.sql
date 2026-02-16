@@ -88,8 +88,8 @@ create policy "Users can update own items" on marketplace_items for update using
 
 -- Insert some initial data for Mall
 insert into mall_items (title, description, points_cost, category, image_url) values
-('环保竹纤维水杯', '可降解材质，耐高温，无异味。', 500, '生活用品', 'https://images.unsplash.com/photo-1577937927133-66ef06acdf18?w=500&q=80'),
-('有机棉帆布袋', '时尚百搭，结实耐用，替代塑料袋。', 300, '生活用品', 'https://images.unsplash.com/photo-1597484662317-c9253e602531?w=500&q=80'),
-('太阳能充电宝', '户外旅行必备，清洁能源随身带。', 2000, '数码科技', 'https://images.unsplash.com/photo-1620714223084-874165486913?w=500&q=80'),
-('再生纸笔记本', '100%再生纸制造，书写顺滑。', 200, '办公文具', 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=500&q=80');
+('环保竹纤维水杯', '可降解材质，耐高温，无异味。', 500, '生活用品', 'https://fafncxwbckmnsrbfumuz.supabase.co/storage/v1/object/public/Points%20Mall%20images/bamboo_fiber_cup.jpg'),
+('有机棉帆布袋', '时尚百搭，结实耐用，替代塑料袋。', 300, '生活用品', 'https://fafncxwbckmnsrbfumuz.supabase.co/storage/v1/object/public/Points%20Mall%20images/canvas_bag.jpg'),
+('太阳能充电宝', '户外旅行必备，清洁能源随身带。', 2000, '数码科技', 'https://fafncxwbckmnsrbfumuz.supabase.co/storage/v1/object/public/Points%20Mall%20images/solar_power_bank.jpg'),
+('再生纸笔记本', '100%再生纸制造，书写顺滑。', 200, '办公文具', 'https://fafncxwbckmnsrbfumuz.supabase.co/storage/v1/object/public/Points%20Mall%20images/Recycled%20notebook.jpg');
 

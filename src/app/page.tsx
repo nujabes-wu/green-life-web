@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calculator, ShoppingBag, Recycle, ArrowRight, Leaf, Globe, Users } from "lucide-react";
+import { Calculator, ShoppingBag, Recycle, ArrowRight, Leaf, Globe, Users, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Home() {
@@ -101,7 +101,7 @@ export default function Home() {
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="group hover:shadow-xl transition-all duration-300 border-primary/10 hover:border-dopamine-orange/50">
               <CardHeader>
                 <div className="p-3 w-fit rounded-xl bg-dopamine-orange/10 text-dopamine-orange mb-4 group-hover:scale-110 transition-transform">
@@ -158,6 +158,26 @@ export default function Home() {
                 </p>
                 <Link href="/ai-recycle" className="text-primary font-medium inline-flex items-center hover:underline underline-offset-4 group-hover:translate-x-1 transition-transform">
                   试一试 <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="group hover:shadow-xl transition-all duration-300 border-primary/10 hover:border-primary/50">
+              <CardHeader>
+                <div className="p-3 w-fit rounded-xl bg-primary/10 text-primary mb-4 group-hover:scale-110 transition-transform">
+                  <Brain className="h-8 w-8" />
+                </div>
+                <CardTitle>AI 环保顾问</CardTitle>
+                <CardDescription>
+                  智能环保咨询服务
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm mb-4">
+                  有任何环保问题？AI 顾问随时为您提供专业建议，助力绿色生活。
+                </p>
+                <Link href="/eco-advisor" className="text-primary font-medium inline-flex items-center hover:underline underline-offset-4 group-hover:translate-x-1 transition-transform">
+                  咨询顾问 <ArrowRight className="ml-1 h-3 w-3" />
                 </Link>
               </CardContent>
             </Card>

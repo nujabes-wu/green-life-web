@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { User } from '@supabase/supabase-js';
-import { LogOut } from 'lucide-react';
+import { LogOut, LogIn } from 'lucide-react';
 import { AuthDialog } from './AuthDialog';
 
 export function AuthButton() {
   const [user, setUser] = useState<User | null>(null);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
 
   useEffect(() => {
     // Check active session
@@ -40,5 +41,13 @@ export function AuthButton() {
     );
   }
 
-  return <AuthDialog />;
+  return (
+    <div>
+      <Button variant="ghost" size="sm" onClick={() => setAuthDialogOpen(true)} className="text-white hover:bg-white/20">
+        <LogIn className="h-4 w-4 mr-2" />
+        登录
+      </Button>
+      <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
+    </div>
+  );
 }

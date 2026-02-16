@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,11 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { ShoppingBag, Recycle, Coins, Bike, Bus, Leaf, ArrowUpRight } from 'lucide-react';
+import { ShoppingBag, Recycle, Coins, Bike, Bus, Leaf, ArrowUpRight, Brain, BarChart3, TrendingUp, Search, Trash2 } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { MallItem, MarketItem } from "@/types";
 import { MallItemCard } from "@/components/recommendations/MallItemCard";
 import { MarketItemCard } from "@/components/recommendations/MarketItemCard";
+import { getChatResponse } from "@/lib/ai/chat";
+import { evaluateMarketItem } from "@/lib/ai/image";
 
 export default function RecommendationsPage() {
   const [activeTab, setActiveTab] = useState('mall');
@@ -32,6 +35,17 @@ export default function RecommendationsPage() {
     contact_info: '',
     image_url: ''
   });
+
+  // AI features state
+  const [creditAnalysis, setCreditAnalysis] = useState<string | null>(null);
+  const [itemEvaluation, setItemEvaluation] = useState<string | null>(null);
+  const [productRecommendations, setProductRecommendations] = useState<string | null>(null);
+  const [isAnalyzingCredits, setIsAnalyzingCredits] = useState(false);
+  const [isEvaluatingItem, setIsEvaluatingItem] = useState(false);
+  const [isGeneratingRecommendations, setIsGeneratingRecommendations] = useState(false);
+  const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
+  const fileInputElement = useRef<HTMLInputElement>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const fetchCredits = async (userId: string) => {
     const { data } = await supabase
@@ -84,19 +98,18 @@ export default function RecommendationsPage() {
     // Update local state optimistically
     setCredits(prev => prev + amount);
 
-    const { error } = await supabase.from('profiles').update({ credits: credits + amount }).eq('id', user.id);
+    // Use RPC to securely add credits
+    const { error } = await supabase.rpc('add_credits', {
+      amount: amount,
+      description: description
+    });
     
     if (!error) {
-      await supabase.from('credit_transactions').insert({
-        user_id: user.id,
-        amount: amount,
-        type: 'earn',
-        description: description
-      });
       toast.success(`恭喜！${description}，获得 ${amount} 积分`);
     } else {
+      console.error('Add credits error:', error);
       setCredits(prev => prev - amount); // Rollback
-      toast.error('积分更新失败');
+      toast.error('积分更新失败: ' + error.message);
     }
   };
 
@@ -105,8 +118,20 @@ export default function RecommendationsPage() {
       toast.error('请先登录');
       return;
     }
-    if (credits < item.points_cost) {
-      toast.error('积分不足');
+
+    // Double check credits from server before redeeming
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('credits')
+      .eq('id', user.id)
+      .single();
+
+    const currentServerCredits = profileData?.credits || 0;
+
+    if (currentServerCredits < item.points_cost) {
+      toast.error(`积分不足 (服务器: ${currentServerCredits}, 需要: ${item.points_cost})`);
+      // Sync local state
+      setCredits(currentServerCredits);
       return;
     }
 
@@ -114,9 +139,12 @@ export default function RecommendationsPage() {
 
     if (error) {
       toast.error('兑换失败: ' + error.message);
+      // Re-fetch credits on error to ensure sync
+      fetchCredits(user.id);
     } else {
       toast.success(`成功兑换 ${item.title}！`);
       setCredits(prev => prev - item.points_cost);
+      fetchCredits(user.id);
       fetchMallItems(); // Refresh stock
     }
   };
@@ -142,6 +170,89 @@ export default function RecommendationsPage() {
       setNewItem({ title: '', description: '', price_cny: '', contact_info: '', image_url: '' });
       fetchMarketItems();
     }
+  };
+
+  // AI功能函数
+  const analyzeCredits = async () => {
+    if (!user) return toast.error('请先登录');
+
+    setIsAnalyzingCredits(true);
+    
+    try {
+      const response = await getChatResponse([
+        {
+          role: 'system',
+          content: '你是一个智能积分管理助手，专注于帮助用户优化积分使用和增长。请基于用户的积分情况，提供专业的分析和建议。',
+        },
+        {
+          role: 'user',
+          content: `我的当前积分余额是 ${credits} 分。请分析我的积分状况，提供以下内容：1. 积分使用建议，包括最佳兑换时机和商品推荐 2. 积分增长策略，如何更高效地获取积分 3. 积分使用计划，基于当前积分水平的短期和长期规划。`,
+        },
+      ]);
+      
+      setCreditAnalysis(response);
+    } catch (error) {
+      console.error('Failed to analyze credits:', error);
+      toast.error('积分分析失败，请重试');
+    } finally {
+      setIsAnalyzingCredits(false);
+    }
+  };
+
+  const evaluateMarketItem = async () => {
+    if (!selectedImage || !newItem.title) return toast.error('请上传图片并填写物品名称');
+
+    setIsEvaluatingItem(true);
+    
+    try {
+      const evaluation = await evaluateMarketItem(selectedImage, newItem.title);
+      setItemEvaluation(evaluation);
+    } catch (error) {
+      console.error('Failed to evaluate market item:', error);
+      toast.error('物品评估失败，请重试');
+    } finally {
+      setIsEvaluatingItem(false);
+    }
+  };
+
+  const generateProductRecommendations = async () => {
+    setIsGeneratingRecommendations(true);
+    
+    try {
+      const response = await getChatResponse([
+        {
+          role: 'system',
+          content: '你是一个绿色消费顾问，专注于推荐环保、可持续的产品。请根据用户的需求，提供个性化的绿色产品建议。',
+        },
+        {
+          role: 'user',
+          content: '请为我推荐一些适合日常使用的环保产品，包括但不限于家居用品、个人护理、办公用品等。每个推荐请包括产品名称、环保特性、价格范围和推荐理由。',
+        },
+      ]);
+      
+      setProductRecommendations(response);
+    } catch (error) {
+      console.error('Failed to generate product recommendations:', error);
+      toast.error('产品推荐生成失败，请重试');
+    } finally {
+      setIsGeneratingRecommendations(false);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const clearSelectedImage = () => {
+    setSelectedImage(null);
+    setItemEvaluation(null);
   };
 
   return (
@@ -193,6 +304,36 @@ export default function RecommendationsPage() {
 
         {/* 1. 积分商城 */}
         <TabsContent value="mall">
+           <div className="mb-6 flex justify-between items-center">
+              <h2 className="text-xl font-semibold">积分商城</h2>
+              {user && (
+                <Button 
+                  onClick={analyzeCredits} 
+                  variant="default"
+                  disabled={isAnalyzingCredits}
+                  loading={isAnalyzingCredits}
+                >
+                  <Brain className="h-4 w-4 mr-2" /> 智能积分分析
+                </Button>
+              )}
+           </div>
+           
+           {creditAnalysis && (
+             <Card className="mb-8 border-primary/20 bg-gradient-to-br from-white to-green-50 dark:from-slate-900 dark:to-slate-800">
+               <CardHeader>
+                 <CardTitle className="flex items-center gap-2">
+                   <TrendingUp className="h-5 w-5 text-primary" />
+                   积分分析与建议
+                 </CardTitle>
+               </CardHeader>
+               <CardContent>
+                 <div className="whitespace-pre-line text-muted-foreground leading-relaxed">
+                   {creditAnalysis}
+                 </div>
+               </CardContent>
+             </Card>
+           )}
+           
            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
              {mallItems.map(item => (
                <MallItemCard 
@@ -221,7 +362,9 @@ export default function RecommendationsPage() {
 
            {isPosting && (
              <Card className="mb-8 border-dashed border-2 bg-muted/30">
-               <CardHeader><CardTitle>发布新物品</CardTitle></CardHeader>
+               <CardHeader>
+                 <CardTitle>发布新物品</CardTitle>
+               </CardHeader>
                <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -243,6 +386,47 @@ export default function RecommendationsPage() {
                     <div className="space-y-2">
                        <Label>图片链接 (可选)</Label>
                        <Input value={newItem.image_url} onChange={e => setNewItem({...newItem, image_url: e.target.value})} placeholder="https://..." />
+                    </div>
+                    <div className="col-span-full space-y-2">
+                       <Label>上传图片评估 (可选)</Label>
+                       <div className="flex items-center gap-4">
+                         <input
+                           type="file"
+                           ref={fileInputElement}
+                           onChange={handleImageUpload}
+                           accept="image/*"
+                           className="hidden"
+                         />
+                         <Button variant="outline" onClick={() => fileInputElement.current?.click()}>
+                           <Search className="h-4 w-4 mr-2" /> 选择图片
+                         </Button>
+                         {selectedImage && (
+                           <div className="flex items-center gap-2">
+                             <img src={selectedImage} alt="Preview" className="h-12 w-12 object-cover rounded" />
+                             <Button variant="ghost" size="sm" onClick={clearSelectedImage}>
+                               <Trash2 className="h-4 w-4" />
+                             </Button>
+                           </div>
+                         )}
+                         {selectedImage && (
+                           <Button 
+                             onClick={evaluateMarketItem} 
+                             variant="default"
+                             disabled={isEvaluatingItem}
+                             loading={isEvaluatingItem}
+                           >
+                             <Brain className="h-4 w-4 mr-2" /> 智能评估
+                           </Button>
+                         )}
+                       </div>
+                       {itemEvaluation && (
+                         <div className="mt-4 p-4 bg-white/60 dark:bg-black/20 rounded-xl text-left border border-white/20 shadow-sm">
+                           <h4 className="font-semibold mb-2">物品评估结果</h4>
+                           <div className="whitespace-pre-line text-sm text-muted-foreground leading-relaxed">
+                             {itemEvaluation}
+                           </div>
+                         </div>
+                       )}
                     </div>
                   </div>
                   <Button onClick={handlePostItem} className="w-full">确认发布</Button>
@@ -315,14 +499,42 @@ export default function RecommendationsPage() {
            </div>
         </TabsContent>
 
-        {/* 4. 消费建议 (原内容) */}
+        {/* 4. 消费建议 */}
         <TabsContent value="guide">
+           <div className="mb-6 flex justify-between items-center">
+              <h2 className="text-xl font-semibold">绿色消费建议</h2>
+              <Button 
+                onClick={generateProductRecommendations} 
+                variant="default"
+                disabled={isGeneratingRecommendations}
+                loading={isGeneratingRecommendations}
+              >
+                <Brain className="h-4 w-4 mr-2" /> 个性化推荐
+              </Button>
+           </div>
+           
+           {productRecommendations && (
+             <Card className="mb-8 border-primary/20 bg-gradient-to-br from-white to-green-50 dark:from-slate-900 dark:to-slate-800">
+               <CardHeader>
+                 <CardTitle className="flex items-center gap-2">
+                   <BarChart3 className="h-5 w-5 text-primary" />
+                   个性化绿色产品推荐
+                 </CardTitle>
+               </CardHeader>
+               <CardContent>
+                 <div className="whitespace-pre-line text-muted-foreground leading-relaxed">
+                   {productRecommendations}
+                 </div>
+               </CardContent>
+             </Card>
+           )}
+           
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
              {[
-                { title: "节能 LED 灯泡", desc: "比传统白炽灯节能 80%，使用寿命长达 15,000 小时。", icon: "💡", price: "¥29.9", tag: "节能" },
-                { title: "竹纤维纸巾", desc: "100% 竹浆制造，生长周期短，更环保的可持续选择。", icon: "🎋", price: "¥19.9", tag: "可再生" },
-                { title: "可降解垃圾袋", desc: "玉米淀粉基材，在自然环境中可完全降解，减少白色污染。", icon: "♻️", price: "¥15.0", tag: "可降解" },
-                { title: "太阳能充电宝", desc: "利用太阳能充电，户外旅行必备，清洁能源随身带。", icon: "☀️", price: "¥199.0", tag: "清洁能源" },
+                { id: '1', title: "节能 LED 灯泡", desc: "比传统白炽灯节能 80%，使用寿命长达 15,000 小时。", icon: "💡", price: "¥29.9", tag: "节能" },
+                { id: '2', title: "竹纤维纸巾", desc: "100% 竹浆制造，生长周期短，更环保的可持续选择。", icon: "🎋", price: "¥19.9", tag: "可再生" },
+                { id: '3', title: "可降解垃圾袋", desc: "玉米淀粉基材，在自然环境中可完全降解，减少白色污染。", icon: "♻️", price: "¥15.0", tag: "可降解" },
+                { id: '4', title: "太阳能充电宝", desc: "利用太阳能充电，户外旅行必备，清洁能源随身带。", icon: "☀️", price: "¥199.0", tag: "清洁能源" },
              ].map((item, i) => (
                 <Card key={i} className="group hover:shadow-xl transition-all duration-300 border-primary/10 overflow-hidden">
                    <CardHeader className="relative pb-0">
@@ -339,9 +551,15 @@ export default function RecommendationsPage() {
                    </CardContent>
                    <CardFooter className="flex justify-between items-center bg-muted/30 py-3 px-6 mt-4">
                       <span className="font-bold text-lg text-primary">{item.price}</span>
-                      <Button variant="ghost" size="sm" className="hover:text-primary hover:bg-primary/10">
-                         查看详情 <ArrowUpRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1"/>
-                      </Button>
+                      <Link href={`/recommendations/product/${item.id}`}>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="hover:text-primary hover:bg-primary/10"
+                        >
+                           查看详情 <ArrowUpRight className="ml-1 h-3 w-3 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1"/>
+                        </Button>
+                      </Link>
                    </CardFooter>
                 </Card>
              ))}

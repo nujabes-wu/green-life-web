@@ -12,6 +12,7 @@ const navItems = [
   { href: '/calculator', label: '碳足迹' },
   { href: '/recommendations', label: '消费建议' },
   { href: '/ai-recycle', label: 'AI回收' },
+  { href: '/eco-advisor', label: 'AI顾问' },
 ];
 
 export function Navbar() {

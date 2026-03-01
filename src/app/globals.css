@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+:root {
+  /* Base Colors - Neutrals (Light/Friendly) */
+  --background: #ffffff;
+  --foreground: #424242; /* Dark Gray */
+  
+  /* Primary: Green (From Logo) */
+  --primary: #7FBF5F; /* Logo Green */
+  --primary-700: #4E8B3A;
+  --primary-500: #7FBF5F;
+  --primary-300: #A9D88A;
+  --primary-100: #E8F5E2;
+  
+  /* Accessible Text on Primary Background */
+  --primary-foreground: #1B5E20; /* Dark Green for AAA Contrast */
+  
+  /* Secondary: Lighter Green for softer elements */
+  --secondary: #E8F5E2; /* Primary 100 */
+  --secondary-foreground: #4E8B3A; /* Primary 700 */
+  
+  /* Accents (From Logo) */
+  --accent-ocean: #A7D9D3; /* Ocean Light */
+  --accent-ocean-dark: #66A5AD; /* Ocean Deep (Estimated) */
+  --accent-warm: #F4A261; /* Footprint Orange (Estimated) */
+  
+  --accent: #F5F5F5;
+  --accent-foreground: #4E8B3A;
+
+  /* Standard UI Colors */
+  --muted: #F5F5F5;
+  --muted-foreground: #757575;
+  
+  --card: #ffffff;
+  --card-foreground: #424242;
+  
+  --popover: #ffffff;
+  --popover-foreground: #424242;
+  
+  --border: #E0E0E0;
+  --input: #E0E0E0;
+  --ring: #7FBF5F; /* Primary */
+
+  --destructive: #FF6B6B; /* Softer Red */
+  --destructive-foreground: #ffffff;
+
+  /* Radius: R ≈ W (Rounded) */
+  --radius: 1rem; /* 16px */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Mode Adaptations */
+    --background: #1A1C19; /* Warm Dark Gray */
+    --foreground: #F5F5F5;
+    
+    --primary: #7FBF5F; /* Keep consistent */
+    --primary-foreground: #ffffff;
+
+    --secondary: #2C3E2A;
+    --secondary-foreground: #A9D88A;
+    
+    --muted: #2C2C2C;
+    --muted-foreground: #A0A0A0;
+    
+    --card: #242623;
+    --card-foreground: #F5F5F5;
+    
+    --popover: #242623;
+    --popover-foreground: #F5F5F5;
+    
+    --border: #3E3E3E;
+    --input: #3E3E3E;
+    --ring: #7FBF5F;
+    
+    --destructive: #FF6B6B;
+    --destructive-foreground: #ffffff;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  
+  --color-accent-ocean: var(--accent-ocean);
+  --color-accent-warm: var(--accent-warm);
+  
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fade-in 0.5s ease-out;
+  --animate-slide-up: slide-up 0.5s ease-out;
+  --animate-bounce-slight: bounce-slight 2s infinite;
+
+  @keyframes accordion-down {
+    from { height: 0 }
+    to { height: var(--radix-accordion-content-height) }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height) }
+    to { height: 0 }
+  }
+  @keyframes fade-in {
+    from { opacity: 0 }
+    to { opacity: 1 }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(10px); opacity: 0 }
+    to { transform: translateY(0); opacity: 1 }
+  }
+  @keyframes bounce-slight {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: var(--font-nunito), 'Inter', 'Segoe UI', sans-serif;
+  scroll-behavior: smooth;
+}
+
+/* Glassmorphism Utilities with Green Tint */
+.glass {
+  @apply bg-white/80 dark:bg-[#1A1C19]/80 backdrop-blur-md border border-white/40 dark:border-white/10;
+}
+
+.glass-green {
+  @apply bg-[#E8F5E2]/60 dark:bg-[#2C3E2A]/30 backdrop-blur-md border border-[#7FBF5F]/20;
+}
+
+/* Brand Gradients */
+.bg-gradient-brand {
+  @apply bg-gradient-to-r from-[var(--primary)] to-[var(--accent-ocean)];
+}
+
+.text-gradient-brand {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-[var(--primary)] to-[var(--accent-ocean)];
+}

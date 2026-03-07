@@ -9,6 +9,7 @@ import { AuthDialog } from './AuthDialog';
 
 export function AuthButton() {
   const [user, setUser] = useState<User | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -25,6 +26,25 @@ export function AuthButton() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    async function getProfile() {
+      if (!user) {
+        setUsername(null);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single();
+        
+      setUsername(data?.username || null);
+    }
+
+    getProfile();
+  }, [user]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
@@ -32,7 +52,7 @@ export function AuthButton() {
   if (user) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-white/80 hidden md:inline">{user.email}</span>
+        <span className="text-sm text-white/90 hidden md:inline font-medium">{username || user.email}</span>
         <Button variant="ghost" size="sm" onClick={handleLogout} className="text-white hover:bg-white/20">
           <LogOut className="h-4 w-4 mr-2" />
           退出

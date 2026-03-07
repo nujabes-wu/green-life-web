@@ -10,13 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { ShoppingBag, Recycle, Coins, Bike, Bus, Leaf, ArrowUpRight, Brain, BarChart3, TrendingUp, Search, Trash2, Sparkles, Gift, Zap, Info, Loader2 } from 'lucide-react';
+import { ShoppingBag, ShoppingCart, Recycle, Coins, Bike, Bus, Leaf, ArrowUpRight, Brain, BarChart3, TrendingUp, Search, Trash2, Sparkles, Gift, Zap, Info, Loader2, X, Plus } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { MallItem, MarketItem } from "@/types";
 import { MallItemCard } from "@/components/recommendations/MallItemCard";
 import { MarketItemCard } from "@/components/recommendations/MarketItemCard";
 import { getChatResponse } from "@/lib/ai/chat";
-import { evaluateMarketItem } from "@/lib/ai/image";
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function RecommendationsPage() {
@@ -25,7 +24,14 @@ export default function RecommendationsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [mallItems, setMallItems] = useState<MallItem[]>([]);
   const [marketItems, setMarketItems] = useState<MarketItem[]>([]);
+  const [recommendationItems, setRecommendationItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cartItems, setCartItems] = useState<any[]>([]);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [checkoutItems, setCheckoutItems] = useState<any[]>([]);
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<any>(null);
+  const [selectedPayment, setSelectedPayment] = useState('alipay');
 
   // Form state for new market item
   const [isPosting, setIsPosting] = useState(false);
@@ -33,16 +39,13 @@ export default function RecommendationsPage() {
     title: '',
     description: '',
     price_cny: '',
-    contact_info: '',
-    image_url: ''
+    contact_info: ''
   });
 
   // AI features state
   const [creditAnalysis, setCreditAnalysis] = useState<string | null>(null);
-  const [itemEvaluation, setItemEvaluation] = useState<string | null>(null);
   const [productRecommendations, setProductRecommendations] = useState<string | null>(null);
   const [isAnalyzingCredits, setIsAnalyzingCredits] = useState(false);
-  const [isEvaluatingItem, setIsEvaluatingItem] = useState(false);
   const [isGeneratingRecommendations, setIsGeneratingRecommendations] = useState(false);
   const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
   const fileInputElement = useRef<HTMLInputElement>(null);
@@ -78,17 +81,55 @@ export default function RecommendationsPage() {
     if (data) setMarketItems(data);
   };
 
+  const fetchRecommendationItems = async () => {
+    const { data } = await supabase.from('recommendations').select('*').order('created_at', { ascending: true });
+    if (data) setRecommendationItems(data);
+  };
+
+  const fetchCartItems = async () => {
+    if (!user) return;
+    
+    const { data: cartData } = await supabase
+      .from('user_cart_items')
+      .select('*')
+      .eq('user_id', user.id);
+    
+    if (cartData) {
+      setCartItems(cartData);
+    }
+  };
+
+  const fetchAddresses = async () => {
+    if (!user) return;
+    
+    const { data: addressesData } = await supabase
+      .from('user_addresses')
+      .select('*')
+      .eq('user_id', user.id);
+    
+    if (addressesData) {
+      setAddresses(addressesData);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       await checkUser();
       // Fetch items in parallel
-      await Promise.all([fetchMallItems(), fetchMarketItems()]);
+      await Promise.all([fetchMallItems(), fetchMarketItems(), fetchRecommendationItems()]);
       setLoading(false);
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchCartItems();
+      fetchAddresses();
+    }
+  }, [user]);
 
   const handleEarnCredits = async (amount: number, description: string) => {
     if (!user) {
@@ -114,40 +155,46 @@ export default function RecommendationsPage() {
     }
   };
 
-  const handleRedeem = async (item: MallItem) => {
+  const handleRedeem = (item: MallItem) => {
     if (!user) {
       toast.error('请先登录');
       return;
     }
 
-    // Double check credits from server before redeeming
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('credits')
-      .eq('id', user.id)
-      .single();
-
-    const currentServerCredits = profileData?.credits || 0;
-
-    if (currentServerCredits < item.points_cost) {
-      toast.error(`积分不足 (服务器: ${currentServerCredits}, 需要: ${item.points_cost})`);
-      // Sync local state
-      setCredits(currentServerCredits);
+    if (item.stock <= 0) {
+      toast.error('商品已售罄');
       return;
     }
 
-    const { error } = await supabase.rpc('redeem_item', { item_id: item.id, user_id: user.id });
-
-    if (error) {
-      toast.error('兑换失败: ' + error.message);
-      // Re-fetch credits on error to ensure sync
-      fetchCredits(user.id);
-    } else {
-      toast.success(`成功兑换 ${item.title}！`);
-      setCredits(prev => prev - item.points_cost);
-      fetchCredits(user.id);
-      fetchMallItems(); // Refresh stock
+    // 检查用户积分是否足够
+    if (credits < item.points_cost) {
+      toast.error(`积分不足 (当前: ${credits}, 需要: ${item.points_cost})`);
+      return;
     }
+
+    console.log('兑换商品ID:', item.id);
+    console.log('商品信息:', item);
+    
+    // 直接设置为结算商品，使用商品的实际ID
+    const purchaseItem = { 
+      ...item, 
+      id: item.id, // 使用商品的实际ID
+      price: item.points_cost, 
+      quantity: 1,
+      productType: 'mall'
+    };
+    setCheckoutItems([purchaseItem]);
+    
+    // 自动选择默认地址
+    const defaultAddress = addresses.find(addr => addr.isDefault);
+    if (defaultAddress) {
+      setSelectedAddress(defaultAddress);
+    } else if (addresses.length > 0) {
+      setSelectedAddress(addresses[0]);
+    }
+    
+    // 打开结算模态框
+    setIsCheckoutModalOpen(true);
   };
 
   const handlePostItem = async () => {
@@ -160,7 +207,7 @@ export default function RecommendationsPage() {
       description: newItem.description,
       price_cny: Number(newItem.price_cny),
       contact_info: newItem.contact_info,
-      image_url: newItem.image_url || 'https://images.unsplash.com/photo-1532635241-17e820acc59f?w=500&q=80'
+      image_url: selectedImage || 'https://images.unsplash.com/photo-1532635241-17e820acc59f?w=500&q=80'
     });
 
     if (error) {
@@ -168,7 +215,22 @@ export default function RecommendationsPage() {
     } else {
       toast.success('发布成功！');
       setIsPosting(false);
-      setNewItem({ title: '', description: '', price_cny: '', contact_info: '', image_url: '' });
+      setNewItem({ title: '', description: '', price_cny: '', contact_info: '' });
+      fetchMarketItems();
+    }
+  };
+
+  const handle下架 = async (itemId: string) => {
+    if (!user) return toast.error('请先登录');
+
+    const { error } = await supabase.from('marketplace_items').update({
+      status: 'sold'
+    }).eq('id', itemId).eq('seller_id', user.id);
+
+    if (error) {
+      toast.error('下架失败');
+    } else {
+      toast.success('商品已下架');
       fetchMarketItems();
     }
   };
@@ -200,21 +262,7 @@ export default function RecommendationsPage() {
     }
   };
 
-  const handleEvaluateMarketItem = async () => {
-    if (!selectedImage || !newItem.title) return toast.error('请上传图片并填写物品名称');
 
-    setIsEvaluatingItem(true);
-    
-    try {
-      const evaluation = await evaluateMarketItem(selectedImage, newItem.title);
-      setItemEvaluation(evaluation ? String(evaluation) : null);
-    } catch (error) {
-      console.error('Failed to evaluate market item:', error);
-      toast.error('物品评估失败，请重试');
-    } finally {
-      setIsEvaluatingItem(false);
-    }
-  };
 
   const generateProductRecommendations = async () => {
     setIsGeneratingRecommendations(true);
@@ -245,7 +293,8 @@ export default function RecommendationsPage() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+        const imageDataUrl = reader.result as string;
+        setSelectedImage(imageDataUrl);
       };
       reader.readAsDataURL(file);
     }
@@ -253,7 +302,235 @@ export default function RecommendationsPage() {
 
   const clearSelectedImage = () => {
     setSelectedImage(null);
-    setItemEvaluation(null);
+  };
+
+  const handleAddToCart = async (item: any) => {
+    if (!user) {
+      toast.error('请先登录');
+      return;
+    }
+    
+    try {
+      // 处理价格，确保是数字格式
+      let price = item.price;
+      if (typeof price === 'string') {
+        price = parseFloat(price.replace('¥', ''));
+      }
+      
+      // 检查购物车中是否已有该商品
+      const existingItem = cartItems.find(cartItem => cartItem.id === item.id);
+      
+      if (existingItem) {
+        // 更新现有商品数量
+        const { error } = await supabase
+          .from('user_cart_items')
+          .update({ quantity: existingItem.quantity + 1 })
+          .eq('id', existingItem.id)
+          .eq('user_id', user.id);
+        
+        if (error) {
+          throw new Error('更新购物车失败: ' + error.message);
+        }
+      } else {
+        // 为商品生成临时uuid
+        const generateUUID = () => {
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+        
+        // 添加新商品到购物车
+        const { error } = await supabase
+          .from('user_cart_items')
+          .insert({
+            user_id: user.id,
+            product_id: generateUUID(),
+            product_type: 'marketplace',
+            title: item.title,
+            price: price,
+            image_url: item.image_url,
+            quantity: 1
+          });
+        
+        if (error) {
+          throw new Error('添加到购物车失败: ' + error.message);
+        }
+      }
+      
+      // 重新获取购物车数据
+      const { data: cartData } = await supabase
+        .from('user_cart_items')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (cartData) {
+        setCartItems(cartData);
+      }
+      
+      toast.success('已添加到购物车');
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast.error('添加到购物车失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
+  };
+
+  const handlePurchase = (item: any) => {
+    if (!user) {
+      toast.error('请先登录');
+      return;
+    }
+    
+    // 处理价格，确保是数字格式
+    let price = item.price_cny || item.price;
+    if (typeof price === 'string') {
+      price = parseFloat(price.replace('¥', ''));
+    }
+    
+    // 为商品生成临时uuid
+    const generateUUID = () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+    
+    // 创建购买的商品
+    const purchaseItem = { ...item, id: generateUUID(), price: price, quantity: 1 };
+    
+    // 设置结算商品
+    setCheckoutItems([purchaseItem]);
+    
+    // 自动选择默认地址
+    const defaultAddress = addresses.find(addr => addr.isDefault);
+    if (defaultAddress) {
+      setSelectedAddress(defaultAddress);
+    } else if (addresses.length > 0) {
+      setSelectedAddress(addresses[0]);
+    }
+    
+    // 打开结算模态框
+    setIsCheckoutModalOpen(true);
+  };
+
+  const handleConfirmCheckout = async () => {
+    if (!selectedAddress || !user) {
+      toast.error('请选择收货地址');
+      return;
+    }
+    
+    // 计算订单总金额和总积分
+    let totalAmount = 0;
+    let totalPoints = 0;
+    
+    checkoutItems.forEach(item => {
+      const price = typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price;
+      if (item.productType === 'mall') {
+        totalPoints += price * item.quantity;
+      } else {
+        totalAmount += price * item.quantity;
+      }
+    });
+    
+    // 处理积分商城的兑换
+    if (totalPoints > 0) {
+      // 检查积分是否足够
+      if (credits < totalPoints) {
+        toast.error(`积分不足 (当前: ${credits}, 需要: ${totalPoints})`);
+        return;
+      }
+      
+      // 扣除积分
+      for (const item of checkoutItems) {
+        if (item.productType === 'mall') {
+          console.log('调用redeem_item RPC函数，商品ID:', item.id, '用户ID:', user.id);
+          const { error } = await supabase.rpc('redeem_item', { item_id: item.id, user_id: user.id });
+          if (error) {
+            console.error('兑换失败:', error);
+            toast.error('兑换失败: ' + error.message);
+            return;
+          }
+          console.log('兑换成功，商品ID:', item.id);
+        }
+      }
+    }
+    
+    try {
+      // 创建新订单到Supabase
+      const { data: orderData, error: orderError } = await supabase
+        .from('user_orders')
+        .insert({
+          user_id: user.id,
+          total_amount: totalAmount + totalPoints,
+          status: '已完成'
+        })
+        .select()
+        .single();
+      
+      if (orderError) {
+        throw new Error('创建订单失败: ' + orderError.message);
+      }
+      
+      // 为商品生成临时uuid
+      const generateUUID = () => {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+      
+      // 创建订单商品
+      let allItemsCreated = true;
+      for (const item of checkoutItems) {
+        const { error: itemError } = await supabase
+          .from('order_items')
+          .insert({
+            order_id: orderData.id,
+            product_id: generateUUID(),
+            product_type: item.productType || 'marketplace',
+            title: item.title,
+            price: typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price,
+            quantity: item.quantity,
+            image_url: item.image_url
+          });
+        
+        if (itemError) {
+          console.error('创建订单项失败:', itemError);
+          allItemsCreated = false;
+          // 继续创建其他订单项，不立即抛出错误
+        }
+      }
+      
+      // 更新二手市集商品状态为已售出
+      for (const item of checkoutItems) {
+        if (item.productType === 'marketplace' || item.price_cny) {
+          await supabase
+            .from('marketplace_items')
+            .update({ status: 'sold' })
+            .eq('id', item.id);
+        }
+      }
+      
+      // 关闭模态框
+      setIsCheckoutModalOpen(false);
+      
+      // 更新积分显示
+      if (totalPoints > 0) {
+        fetchCredits(user.id);
+      }
+      
+      if (allItemsCreated) {
+        toast.success('订单已提交');
+      } else {
+        toast.success('订单已创建，但部分商品添加失败');
+      }
+    } catch (error) {
+      console.error('Error creating order:', error);
+      toast.error('订单提交失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
   };
 
   return (
@@ -477,17 +754,8 @@ export default function RecommendationsPage() {
                                 className="rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus-visible:ring-primary/20 py-6"
                               />
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-sm font-bold text-slate-700 dark:text-slate-300">图片链接 (可选)</Label>
-                              <Input 
-                                value={newItem.image_url} 
-                                onChange={e => setNewItem({...newItem, image_url: e.target.value})} 
-                                placeholder="https://..." 
-                                className="rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus-visible:ring-primary/20 py-6"
-                              />
-                            </div>
                             <div className="col-span-full space-y-3">
-                              <Label className="text-sm font-bold text-slate-700 dark:text-slate-300">上传图片评估 (可选)</Label>
+                              <Label className="text-sm font-bold text-slate-700 dark:text-slate-300">上传封面 (可选)</Label>
                               <div className="flex flex-wrap items-center gap-4">
                                 <input
                                   type="file"
@@ -501,7 +769,7 @@ export default function RecommendationsPage() {
                                   onClick={() => fileInputElement.current?.click()}
                                   className="rounded-xl border-slate-200 dark:border-slate-800 hover:bg-white transition-all px-6 font-bold"
                                 >
-                                  <Search className="h-4 w-4 mr-2" /> 选择图片
+                                  <Search className="h-4 w-4 mr-2" /> 选择封面
                                 </Button>
                                 {selectedImage && (
                                   <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 pr-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -511,33 +779,7 @@ export default function RecommendationsPage() {
                                     </Button>
                                   </div>
                                 )}
-                                {selectedImage && (
-                                  <Button 
-                                    onClick={handleEvaluateMarketItem} 
-                                    variant="default"
-                                    disabled={isEvaluatingItem}
-                                    className="rounded-xl bg-blue-600 hover:bg-blue-700 font-bold px-6 shadow-lg shadow-blue-600/20"
-                                  >
-                                    {isEvaluatingItem ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Brain className="h-4 w-4 mr-2" />}
-                                    智能评估
-                                  </Button>
-                                )}
                               </div>
-                              {itemEvaluation && (
-                                <motion.div 
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="mt-4 p-5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm"
-                                >
-                                  <h4 className="font-black text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2">
-                                    <Sparkles className="h-4 w-4" />
-                                    物品评估结果
-                                  </h4>
-                                  <div className="whitespace-pre-line text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
-                                    {itemEvaluation}
-                                  </div>
-                                </motion.div>
-                              )}
                             </div>
                           </div>
                           <Button onClick={handlePostItem} className="w-full py-8 rounded-2xl text-lg font-black shadow-xl shadow-primary/20 active:scale-[0.98] transition-all mt-4">
@@ -556,7 +798,13 @@ export default function RecommendationsPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
                       >
-                        <MarketItemCard item={item} />
+                        <MarketItemCard 
+                          item={item} 
+                          user={user} 
+                          on下架={handle下架} 
+                          onAddToCart={handleAddToCart} 
+                          onPurchase={handlePurchase} 
+                        />
                       </motion.div>
                     ))}
                     {marketItems.length === 0 && !loading && (
@@ -581,68 +829,104 @@ export default function RecommendationsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {[
-                      { 
-                        title: '绿色出行', 
-                        desc: '骑行或步行代替开车', 
-                        reward: '每公里 10 积分', 
-                        limit: '每日上限 100', 
-                        icon: Bike, 
-                        color: 'green',
-                        action: () => handleEarnCredits(10, '骑行 1 公里')
-                      },
-                      { 
-                        title: '公共交通', 
-                        desc: '乘坐地铁或公交', 
-                        reward: '每次 20 积分', 
-                        limit: '不设上限', 
-                        icon: Bus, 
-                        color: 'blue',
-                        action: () => handleEarnCredits(20, '乘坐公共交通')
-                      },
-                      { 
-                        title: '垃圾回收', 
-                        desc: '正确分类并投放垃圾', 
-                        reward: '每公斤 50 积分', 
-                        limit: '根据重量计算', 
-                        icon: Recycle, 
-                        color: 'orange',
-                        action: () => handleEarnCredits(50, '回收物品')
-                      }
-                    ].map((item, i) => (
-                      <motion.div
-                        key={i}
-                        whileHover={{ y: -5 }}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                      >
-                        <Card className={`group relative overflow-hidden border-none shadow-xl shadow-slate-200/50 dark:shadow-none bg-gradient-to-br from-${item.color}-50 to-white dark:from-${item.color}-950/20 dark:to-slate-900 rounded-[2rem]`}>
-                          <div className={`absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform duration-500`}>
-                            <item.icon className="h-24 w-24" />
+                    {/* 绿色出行 */}
+                    <motion.div
+                      whileHover={{ y: -5 }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0 * 0.1 }}
+                    >
+                      <Card className="group relative overflow-hidden border-none shadow-xl shadow-slate-200/50 dark:shadow-none bg-gradient-to-br from-green-50 to-white dark:from-green-950/20 dark:to-slate-900 rounded-[2rem]">
+                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                          <Bike className="h-24 w-24" />
+                        </div>
+                        <CardHeader className="relative z-10 pb-2">
+                          <div className="h-14 w-14 rounded-2xl bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center mb-4 shadow-inner">
+                            <Bike className="h-7 w-7" />
                           </div>
-                          <CardHeader className="relative z-10 pb-2">
-                            <div className={`h-14 w-14 rounded-2xl bg-${item.color}-100 dark:bg-${item.color}-900/30 text-${item.color}-600 dark:text-${item.color}-400 flex items-center justify-center mb-4 shadow-inner`}>
-                              <item.icon className="h-7 w-7" />
-                            </div>
-                            <CardTitle className="text-xl font-black">{item.title}</CardTitle>
-                            <CardDescription className="font-medium">{item.desc}</CardDescription>
-                          </CardHeader>
-                          <CardContent className="relative z-10 space-y-4">
-                            <div className="flex flex-col gap-1">
-                              <span className={`text-2xl font-black text-${item.color}-600 dark:text-${item.color}-400`}>{item.reward}</span>
-                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{item.limit}</span>
-                            </div>
-                            <Button 
-                              onClick={item.action} 
-                              className={`w-full py-6 rounded-xl bg-${item.color}-600 hover:bg-${item.color}-700 text-white font-black shadow-lg shadow-${item.color}-600/20 active:scale-[0.98] transition-all`}
-                            >
-                              立即打卡奖励
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
+                          <CardTitle className="text-xl font-black">绿色出行</CardTitle>
+                          <CardDescription className="font-medium">骑行或步行代替开车</CardDescription>
+                        </CardHeader>
+                        <CardContent className="relative z-10 space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-black text-green-600 dark:text-green-400">每公里 10 积分</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">每日上限 100</span>
+                          </div>
+                          <Button 
+                            onClick={() => handleEarnCredits(10, '骑行 1 公里')} 
+                            className="w-full py-6 rounded-xl bg-green-500 hover:bg-green-600 text-white font-black shadow-lg shadow-green-500/20 active:scale-[0.98] transition-all"
+                          >
+                            立即打卡奖励
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+
+                    {/* 公共交通 */}
+                    <motion.div
+                      whileHover={{ y: -5 }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 1 * 0.1 }}
+                    >
+                      <Card className="group relative overflow-hidden border-none shadow-xl shadow-slate-200/50 dark:shadow-none bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/20 dark:to-slate-900 rounded-[2rem]">
+                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                          <Bus className="h-24 w-24" />
+                        </div>
+                        <CardHeader className="relative z-10 pb-2">
+                          <div className="h-14 w-14 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-4 shadow-inner">
+                            <Bus className="h-7 w-7" />
+                          </div>
+                          <CardTitle className="text-xl font-black">公共交通</CardTitle>
+                          <CardDescription className="font-medium">乘坐地铁或公交</CardDescription>
+                        </CardHeader>
+                        <CardContent className="relative z-10 space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-black text-blue-600 dark:text-blue-400">每次 20 积分</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">不设上限</span>
+                          </div>
+                          <Button 
+                            onClick={() => handleEarnCredits(20, '乘坐公共交通')} 
+                            className="w-full py-6 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-black shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all"
+                          >
+                            立即打卡奖励
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+
+                    {/* 垃圾回收 */}
+                    <motion.div
+                      whileHover={{ y: -5 }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 2 * 0.1 }}
+                    >
+                      <Card className="group relative overflow-hidden border-none shadow-xl shadow-slate-200/50 dark:shadow-none bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-slate-900 rounded-[2rem]">
+                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                          <Recycle className="h-24 w-24" />
+                        </div>
+                        <CardHeader className="relative z-10 pb-2">
+                          <div className="h-14 w-14 rounded-2xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center mb-4 shadow-inner">
+                            <Recycle className="h-7 w-7" />
+                          </div>
+                          <CardTitle className="text-xl font-black">垃圾回收</CardTitle>
+                          <CardDescription className="font-medium">正确分类并投放垃圾</CardDescription>
+                        </CardHeader>
+                        <CardContent className="relative z-10 space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-2xl font-black text-orange-600 dark:text-orange-400">每公斤 50 积分</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">根据重量计算</span>
+                          </div>
+                          <Button 
+                            onClick={() => handleEarnCredits(50, '回收物品')} 
+                            className="w-full py-6 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
+                          >
+                            立即打卡奖励
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
                   </div>
 
                   <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-primary/10 flex flex-col md:flex-row items-center gap-8 shadow-sm">
@@ -705,44 +989,54 @@ export default function RecommendationsPage() {
                   )}
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                    {[
-                       { id: '1', title: "节能 LED 灯泡", desc: "比传统白炽灯节能 80%，使用寿命长达 15,000 小时。", icon: "💡", price: "¥29.9", tag: "节能", color: "yellow" },
-                       { id: '2', title: "竹纤维纸巾", desc: "100% 竹浆制造，生长周期短，更环保的可持续选择。", icon: "🎋", price: "¥19.9", tag: "可再生", color: "green" },
-                       { id: '3', title: "可降解垃圾袋", desc: "玉米淀粉基材，在自然环境中可完全降解，减少污染。", icon: "♻️", price: "¥15.0", tag: "可降解", color: "orange" },
-                       { id: '4', title: "太阳能充电宝", desc: "利用太阳能充电，户外旅行必备，清洁能源随身带。", icon: "☀️", price: "¥199.0", tag: "清洁能源", color: "blue" },
-                    ].map((item, i) => (
+                    {recommendationItems.map((item, i) => (
                        <motion.div
-                         key={i}
+                         key={item.id}
                          whileHover={{ y: -5 }}
                          initial={{ opacity: 0, y: 20 }}
                          animate={{ opacity: 1, y: 0 }}
                          transition={{ delay: i * 0.1 }}
                        >
                          <Card className="group flex flex-col h-full border-none shadow-xl shadow-slate-200/50 dark:shadow-none bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden hover:shadow-2xl transition-all duration-300">
-                            <div className={`h-48 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center text-7xl transition-transform duration-500 group-hover:scale-110`}>
-                               {item.icon}
-                            </div>
-                            <CardHeader className="relative pb-2 space-y-3">
-                               <div className="flex justify-between items-start">
-                                  <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 border-none font-bold rounded-lg px-3">
-                                    {item.tag}
-                                  </Badge>
-                               </div>
-                               <CardTitle className="text-xl font-black group-hover:text-primary transition-colors">{item.title}</CardTitle>
-                               <CardDescription className="text-sm font-medium leading-relaxed line-clamp-2">{item.desc}</CardDescription>
-                            </CardHeader>
+                            <div className={`h-48 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-110`}>
+                              {item.image_url ? (
+                                <img src={item.image_url} alt={item.title} className="max-h-full max-w-full object-contain" />
+                              ) : (
+                                <span className="text-7xl">🌱</span>
+                              )}
+                           </div>
+                           <CardHeader className="relative pb-2 space-y-3">
+                              <div className="flex justify-between items-start">
+                                 <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 border-none font-bold rounded-lg px-3">
+                                   {item.tag}
+                                 </Badge>
+                              </div>
+                              <CardTitle className="text-xl font-black group-hover:text-primary transition-colors">{item.title}</CardTitle>
+                              <CardDescription className="text-sm font-medium leading-relaxed line-clamp-2">{item.description}</CardDescription>
+                           </CardHeader>
                             <div className="mt-auto p-6 pt-0">
-                               <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
-                                  <span className="font-black text-xl text-slate-900 dark:text-white">{item.price}</span>
-                                  <Link href={`/recommendations/product/${item.id}`}>
+                               <div className="space-y-3">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-black text-xl text-slate-900 dark:text-white">{item.price}</span>
+                                  </div>
+                                  <div className="flex gap-2">
                                     <Button 
-                                      variant="ghost" 
+                                      variant="secondary" 
                                       size="sm" 
-                                      className="rounded-xl hover:bg-white dark:hover:bg-slate-800 font-bold group/btn"
+                                      className="flex-1 font-bold"
+                                      onClick={() => handleAddToCart(item)}
                                     >
-                                       详情 <ArrowUpRight className="ml-1 h-4 w-4 transition-transform group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1"/>
+                                      <ShoppingCart className="h-4 w-4 mr-1" />
+                                      加入购物车
                                     </Button>
-                                  </Link>
+                                    <Button 
+                                      size="sm" 
+                                      className="flex-1 font-bold"
+                                      onClick={() => handlePurchase(item)}
+                                    >
+                                      立即购买
+                                    </Button>
+                                  </div>
                                </div>
                             </div>
                          </Card>
@@ -754,6 +1048,197 @@ export default function RecommendationsPage() {
             </motion.div>
           </AnimatePresence>
         </Tabs>
+
+        {/* 结算模态框 */}
+        {isCheckoutModalOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center">
+                <h3 className="text-xl font-black">
+                  {checkoutItems.some(item => item.productType === 'mall') ? '确认兑换' : '确认订单'}
+                </h3>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setIsCheckoutModalOpen(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                {/* 收货地址 */}
+                <div>
+                  <h4 className="font-bold mb-4">收货地址</h4>
+                  {addresses.length === 0 ? (
+                    <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-4 text-center">
+                      <p className="text-slate-500 mb-4">暂无收货地址</p>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setIsCheckoutModalOpen(false);
+                          window.location.href = '/profile?tab=addresses';
+                        }}
+                      >
+                        添加地址
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {addresses.map((address) => (
+                        <div 
+                          key={address.id} 
+                          className={`border rounded-xl p-4 cursor-pointer transition-all ${selectedAddress?.id === address.id ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'}`}
+                          onClick={() => setSelectedAddress(address)}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h5 className="font-bold">{address.name}</h5>
+                              <p className="text-sm text-slate-600 dark:text-slate-400">{address.phone}</p>
+                              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{address.address}</p>
+                            </div>
+                            {address.isDefault && (
+                              <span className="text-xs px-2 py-1 bg-primary text-white rounded-full">默认</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          setIsCheckoutModalOpen(false);
+                          window.location.href = '/profile?tab=addresses';
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        添加新地址
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* 支付方式（仅消费建议商品显示） */}
+                {!checkoutItems.some(item => item.productType === 'mall') && (
+                  <div>
+                    <h4 className="font-bold mb-4">支付方式</h4>
+                    <div className="space-y-3">
+                      <div 
+                        className={`border rounded-xl p-4 cursor-pointer transition-all ${selectedPayment === 'alipay' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'}`}
+                        onClick={() => setSelectedPayment('alipay')}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
+                            支
+                          </div>
+                          <span className="font-medium">支付宝</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`border rounded-xl p-4 cursor-pointer transition-all ${selectedPayment === 'wechat' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-800'}`}
+                        onClick={() => setSelectedPayment('wechat')}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center text-white font-bold">
+                            微
+                          </div>
+                          <span className="font-medium">微信支付</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* 订单商品 */}
+                <div>
+                  <h4 className="font-bold mb-4">商品信息</h4>
+                  <div className="space-y-3">
+                    {checkoutItems.map((item) => (
+                      <div key={item.id} className="flex items-center gap-4 p-3 border border-slate-200 dark:border-slate-800 rounded-xl">
+                        <div className="h-16 w-16 rounded-lg overflow-hidden flex-shrink-0">
+                          <img 
+                            src={item.image_url || 'https://images.unsplash.com/photo-1532635241-17e820acc59f?w=300&q=80'} 
+                            alt={item.title} 
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-medium line-clamp-1">{item.title}</h5>
+                          <div className="flex justify-between items-center mt-2">
+                            <span className="text-primary font-bold">
+                              {item.productType === 'mall' ? `${item.price} 积分` : `¥${typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price}`}
+                            </span>
+                            <span className="text-slate-500">×{item.quantity}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* 订单金额 */}
+                <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
+                  <div className="space-y-2">
+                    {checkoutItems.some(item => item.productType === 'mall') ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">商品总积分</span>
+                          <span>{checkoutItems.reduce((total, item) => {
+                            const price = typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price;
+                            return total + price * item.quantity;
+                          }, 0)} 积分</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-lg border-t border-slate-200 dark:border-slate-800 pt-4">
+                          <span>实付积分</span>
+                          <span className="text-primary">{checkoutItems.reduce((total, item) => {
+                            const price = typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price;
+                            return total + price * item.quantity;
+                          }, 0)} 积分</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">商品总价</span>
+                          <span>¥{checkoutItems.reduce((total, item) => {
+                            const price = typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price;
+                            return total + price * item.quantity;
+                          }, 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">运费</span>
+                          <span>¥0.00</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-lg border-t border-slate-200 dark:border-slate-800 pt-4">
+                          <span>实付金额</span>
+                          <span className="text-primary">¥{checkoutItems.reduce((total, item) => {
+                            const price = typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price;
+                            return total + price * item.quantity;
+                          }, 0).toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-6 border-t dark:border-slate-800 flex justify-end gap-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsCheckoutModalOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button 
+                  onClick={handleConfirmCheckout}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  {checkoutItems.some(item => item.productType === 'mall') ? '确认兑换' : '确认支付'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

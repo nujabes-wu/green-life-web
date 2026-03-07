@@ -32,6 +32,7 @@ export function Footer() {
             <ul className="space-y-3 text-sm">
               <li><Link href="/calculator" className="flex items-center hover:text-primary transition-colors group"><span className="w-1.5 h-1.5 rounded-full bg-primary mr-2 opacity-0 group-hover:opacity-100 transition-opacity"/>碳足迹计算器</Link></li>
               <li><Link href="/recommendations" className="flex items-center hover:text-primary transition-colors group"><span className="w-1.5 h-1.5 rounded-full bg-primary mr-2 opacity-0 group-hover:opacity-100 transition-opacity"/>绿色消费建议</Link></li>
+              <li><Link href="/community" className="flex items-center hover:text-primary transition-colors group"><span className="w-1.5 h-1.5 rounded-full bg-primary mr-2 opacity-0 group-hover:opacity-100 transition-opacity"/>环保社区</Link></li>
               <li><Link href="/ai-recycle" className="flex items-center hover:text-primary transition-colors group"><span className="w-1.5 h-1.5 rounded-full bg-primary mr-2 opacity-0 group-hover:opacity-100 transition-opacity"/>AI 智能回收</Link></li>
               <li><Link href="/eco-advisor" className="flex items-center hover:text-primary transition-colors group"><span className="w-1.5 h-1.5 rounded-full bg-primary mr-2 opacity-0 group-hover:opacity-100 transition-opacity"/>AI 环保顾问</Link></li>
             </ul>

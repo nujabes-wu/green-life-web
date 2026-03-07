@@ -12,8 +12,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 const navItems = [
   { href: '/calculator', label: '碳足迹' },
   { href: '/recommendations', label: '消费建议' },
+  { href: '/community', label: '环保社区' },
   { href: '/ai-recycle', label: 'AI回收' },
   { href: '/eco-advisor', label: 'AI顾问' },
+  { href: '/profile', label: '个人中心' },
 ];
 
 export function Navbar() {

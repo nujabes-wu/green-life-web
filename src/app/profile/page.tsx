@@ -913,11 +913,11 @@ export default function ProfilePage() {
         return;
       }
 
-      // 创建订单
+      // 创建订单（使用买家ID作为user_id，这样订单会出现在买家的订单列表中）
       const { data: orderData, error: orderError } = await supabase
         .from('user_orders')
         .insert({
-          user_id: user.id,
+          user_id: request.buyer_id,
           total_amount: itemData.price_cny,
           status: '已完成'
         })

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { User } from '@supabase/supabase-js';
-import { ShoppingCart, Package, User as UserIcon, Home, Edit, Trash2, Plus, MapPin, Phone, Mail, CreditCard, X, MessageSquare, LogOut, Settings, ChevronRight, Shield, Bell, CheckCircle2, Clock, Truck, Send, Camera } from 'lucide-react';
+import { ShoppingCart, Package, User as UserIcon, Home, Edit, Trash2, Plus, MapPin, Phone, Mail, CreditCard, X, MessageSquare, LogOut, Settings, ChevronRight, Shield, Bell, CheckCircle2, Clock, Truck, Send, Camera, Calendar, Users, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1532635241-17e820acc59f?w=300&q=80';
@@ -162,6 +162,7 @@ export default function ProfilePage() {
       fetchAddresses();
       fetchChats();
       fetchTradeRequests();
+      fetchActivities();
 
       // 实时监听购物车变化
       const cartSubscription = supabase
@@ -605,8 +606,7 @@ export default function ProfilePage() {
       .insert({
         user_id: user.id,
         total_amount: totalAmount + totalPoints,
-        status: '已完成',
-        address_id: selectedAddress.id
+        status: '已完成'
       })
       .select()
       .single();
@@ -856,6 +856,9 @@ export default function ProfilePage() {
 
   // 交易请求相关状态
   const [tradeRequests, setTradeRequests] = useState<any[]>([]);
+  // 活动相关状态
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
 
   const fetchTradeRequests = async () => {
     if (!user) return;
@@ -914,7 +917,7 @@ export default function ProfilePage() {
       const { data: orderData, error: orderError } = await supabase
         .from('user_orders')
         .insert({
-          user_id: request.buyer_id,
+          user_id: user.id,
           total_amount: itemData.price_cny,
           status: '已完成'
         })
@@ -933,7 +936,6 @@ export default function ProfilePage() {
         .insert({
           order_id: orderData.id,
           product_id: itemData.id,
-          product_type: 'marketplace',
           title: itemData.title,
           price: itemData.price_cny,
           quantity: 1
@@ -1011,6 +1013,80 @@ export default function ProfilePage() {
     } catch (err) {
       console.error('Exception canceling trade request:', err);
       toast.error('取消请求时发生异常');
+    }
+  };
+
+  const fetchActivities = async () => {
+    if (!user) return;
+
+    setLoadingActivities(true);
+    try {
+      // 获取用户报名的活动
+      const { data, error } = await supabase
+        .from('activity_participants')
+        .select(`
+          post_id,
+          status,
+          community_posts(
+            id,
+            title,
+            content,
+            type,
+            image_url,
+            activity_time,
+            activity_location,
+            reward_credits,
+            participant_count,
+            created_at,
+            profiles(username, avatar_url)
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('status', 'registered')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching activities:', error);
+        setActivities([]);
+        return;
+      }
+
+      // 过滤出有社区帖子信息的活动
+      const validActivities = data.filter(item => item.community_posts).map(item => ({
+        ...item.community_posts,
+        participation_status: item.status
+      }));
+
+      setActivities(validActivities);
+    } catch (err) {
+      console.error('Exception fetching activities:', err);
+      setActivities([]);
+    } finally {
+      setLoadingActivities(false);
+    }
+  };
+
+  const handleCancelActivity = async (postId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('activity_participants')
+        .update({ status: 'cancelled' })
+        .eq('post_id', postId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        toast.error('取消报名失败，请稍后重试');
+        console.error('Error canceling activity:', error);
+        return;
+      }
+
+      toast.success('已取消报名');
+      await fetchActivities();
+    } catch (err) {
+      console.error('Exception canceling activity:', err);
+      toast.error('取消报名时发生异常');
     }
   };
 
@@ -1234,6 +1310,13 @@ export default function ProfilePage() {
                 我的订单
               </TabsTrigger>
               <TabsTrigger 
+                value="activities" 
+                className="px-6 h-full rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white transition-all duration-300 font-bold gap-2"
+              >
+                <Calendar className="h-4 w-4" />
+                我的活动
+              </TabsTrigger>
+              <TabsTrigger 
                 value="messages" 
                 className="px-6 h-full rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white transition-all duration-300 font-bold gap-2"
               >
@@ -1267,7 +1350,111 @@ export default function ProfilePage() {
           </div>
 
           <AnimatePresence mode="wait">
-            {activeTab === 'cart' ? (
+            {activeTab === 'activities' ? (
+              <TabsContent value="activities" forceMount={true} key="activities" className="mt-0 focus-visible:outline-none">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card className="border-none shadow-xl shadow-slate-200/40 dark:shadow-none rounded-[2.5rem] overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                    <CardHeader className="border-b border-slate-100 dark:border-slate-800/50 pb-6">
+                      <CardTitle className="text-2xl font-black flex items-center gap-2">
+                        <Calendar className="h-6 w-6 text-green-500" />
+                        我的活动
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6 md:p-8">
+                      {loadingActivities ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-6">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+                          <p className="text-lg font-medium">加载中...</p>
+                        </div>
+                      ) : activities.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-6">
+                          <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                            <Calendar className="h-10 w-10 text-slate-300" />
+                          </div>
+                          <div className="text-center space-y-2">
+                            <p className="text-xl font-bold text-slate-700 dark:text-slate-200">暂无报名的活动</p>
+                            <p className="text-slate-500">去社区浏览并报名感兴趣的环保活动吧！</p>
+                          </div>
+                          <Button className="rounded-full px-8 bg-green-500 hover:bg-green-600 text-white font-bold shadow-lg shadow-green-500/20">去社区</Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {activities.map((activity) => (
+                            <div key={activity.id} className="border border-slate-200 dark:border-slate-700 rounded-[1.5rem] p-6 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-all">
+                              <div className="flex flex-col md:flex-row gap-6">
+                                {activity.image_url && (
+                                  <div className="h-24 w-24 rounded-xl overflow-hidden flex-shrink-0 shadow-sm">
+                                    <img 
+                                      src={activity.image_url} 
+                                      alt={activity.title} 
+                                      className="h-full w-full object-cover hover:scale-110 transition-transform duration-500"
+                                    />
+                                  </div>
+                                )}
+                                <div className="flex-1 space-y-4">
+                                  <div>
+                                    <h3 className="font-bold text-xl mb-2">{activity.title}</h3>
+                                    <p className="text-slate-600 dark:text-slate-300 text-sm line-clamp-2">{activity.content}</p>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {activity.activity_time && (
+                                      <div className="flex items-center gap-3 text-sm">
+                                        <Calendar className="h-4 w-4 text-emerald-500" />
+                                        <span className="text-slate-600 dark:text-slate-300">{new Date(activity.activity_time).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {activity.activity_location && (
+                                      <div className="flex items-center gap-3 text-sm">
+                                        <MapPin className="h-4 w-4 text-emerald-500" />
+                                        <span className="text-slate-600 dark:text-slate-300">{activity.activity_location}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-3 text-sm">
+                                      <Users className="h-4 w-4 text-emerald-500" />
+                                      <span className="text-slate-600 dark:text-slate-300">{activity.participant_count || 0} 人已报名</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm">
+                                      <Sparkles className="h-4 w-4 text-yellow-500" />
+                                      <span className="text-slate-600 dark:text-slate-300">参与奖励: {activity.reward_credits || 0} 积分</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700">
+                                        {activity.profiles?.avatar_url ? (
+                                          <img src={activity.profiles.avatar_url} alt={activity.profiles.username} className="h-full w-full object-cover" />
+                                        ) : (
+                                          <span className="text-sm font-bold text-slate-400">{activity.profiles?.username?.charAt(0).toUpperCase() || 'U'}</span>
+                                        )}
+                                      </div>
+                                      <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{activity.profiles?.username || '匿名用户'}</span>
+                                    </div>
+                                    <Button 
+                                      variant="destructive" 
+                                      size="sm" 
+                                      className="rounded-xl gap-2 transition-all font-bold h-10 px-6"
+                                      onClick={() => handleCancelActivity(activity.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      <span>取消报名</span>
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </TabsContent>
+            ) : activeTab === 'cart' ? (
               <TabsContent value="cart" forceMount={true} key="cart" className="mt-0 focus-visible:outline-none">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}

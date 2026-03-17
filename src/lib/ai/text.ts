@@ -15,7 +15,13 @@ export async function generateText(
     temperature: options?.temperature || 0.7,
   });
 
-  return response.choices[0].text;
+  let text = response.choices[0].text;
+  
+  // 去除**和###等符号
+  text = text.replace(/\*\*/g, '');
+  text = text.replace(/###/g, '');
+  
+  return text;
 }
 
 export async function generateEcoReport(carbonData: {

@@ -15,15 +15,15 @@ export function Footer() {
               <div className="relative h-12 w-12 bg-primary/20 rounded-xl group-hover:bg-primary/30 transition-colors overflow-hidden flex items-center justify-center">
                 <Image 
                   src="/logo.svg" 
-                  alt="绿色生活 Logo" 
+                  alt="Eco Moment Logo" 
                   fill 
                   className="object-contain scale-125 transition-transform duration-500 group-hover:scale-150"
                 />
               </div>
-              <span>绿色生活</span>
+              <span>Eco Moment</span>
             </Link>
             <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
-              科技赋能环保，让每一次选择都充满善意。加入我们要创造一个更可持续的未来。
+              科技助力环保，让每一个选择都充满善意。加入我们，共同创造更可持续的未来。
             </p>
           </div>
           
@@ -60,7 +60,7 @@ export function Footer() {
         
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-center text-sm text-slate-500">
-            &copy; 2026 绿色生活 Green Life. All rights reserved.
+            &copy; 2026 Eco Moment. All rights reserved.
           </p>
           <div className="flex gap-6 text-sm font-medium text-slate-400">
             <span className="flex items-center hover:text-primary cursor-default transition-colors"><Leaf className="h-3 w-3 mr-1" /> 科技助力环保</span>

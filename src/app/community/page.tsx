@@ -26,7 +26,11 @@ interface Post {
   comments_count: number;
   created_at: string;
   updated_at: string;
-  user?: {
+  activity_time?: string;
+  activity_location?: string;
+  reward_credits?: number;
+  participant_count?: number;
+  profiles?: {
     username: string;
     avatar_url: string;
   };
@@ -39,7 +43,7 @@ interface Comment {
   content: string;
   parent_id: string | null;
   created_at: string;
-  user?: {
+  profiles?: {
     username: string;
     avatar_url: string;
   };
@@ -56,13 +60,17 @@ export default function CommunityPage() {
     title: '',
     content: '',
     type: 'experience',
-    image_url: null as string | null
+    image_url: null as string | null,
+    activity_time: '',
+    activity_location: '',
+    reward_credits: 0
   });
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [profile, setProfile] = useState<{username: string | null, avatar_url: string | null} | null>(null);
+  const [participationStatus, setParticipationStatus] = useState<Record<string, string>>({});
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -153,6 +161,12 @@ export default function CommunityPage() {
   }, []);
 
   useEffect(() => {
+    if (user) {
+      checkParticipationStatus();
+    }
+  }, [user]);
+
+  useEffect(() => {
     fetchPosts();
   }, [activeTab]);
 
@@ -161,6 +175,90 @@ export default function CommunityPage() {
       fetchComments(selectedPostId);
     }
   }, [selectedPostId]);
+
+  const checkParticipationStatus = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('activity_participants')
+        .select('post_id, status')
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error checking participation status:', error);
+        return;
+      }
+
+      const statusMap: Record<string, string> = {};
+      data.forEach(item => {
+        statusMap[item.post_id] = item.status;
+      });
+
+      setParticipationStatus(statusMap);
+    } catch (err) {
+      console.error('Exception checking participation status:', err);
+    }
+  };
+
+  const handleParticipate = async (postId: string) => {
+    if (!user) {
+      toast.error('请先登录');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('activity_participants')
+        .insert({
+          post_id: postId,
+          user_id: user.id,
+          status: 'registered'
+        });
+
+      if (error) {
+        if (error.code === '23505') {
+          toast.error('您已经报名了该活动');
+        } else {
+          toast.error('报名失败，请稍后重试');
+          console.error('Error participating:', error);
+        }
+        return;
+      }
+
+      toast.success('报名成功！');
+      await fetchPosts();
+      await checkParticipationStatus();
+    } catch (err) {
+      console.error('Exception participating:', err);
+      toast.error('报名时发生异常');
+    }
+  };
+
+  const handleCancelParticipation = async (postId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('activity_participants')
+        .update({ status: 'cancelled' })
+        .eq('post_id', postId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        toast.error('取消报名失败，请稍后重试');
+        console.error('Error cancelling participation:', error);
+        return;
+      }
+
+      toast.success('已取消报名');
+      await fetchPosts();
+      await checkParticipationStatus();
+    } catch (err) {
+      console.error('Exception cancelling participation:', err);
+      toast.error('取消报名时发生异常');
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -200,7 +298,10 @@ export default function CommunityPage() {
           title: newPost.title,
           content: newPost.content,
           type: newPost.type,
-          image_url: newPost.image_url
+          image_url: newPost.image_url,
+          activity_time: newPost.type === 'activity' ? newPost.activity_time : null,
+          activity_location: newPost.type === 'activity' ? newPost.activity_location : null,
+          reward_credits: newPost.type === 'activity' ? newPost.reward_credits : 0
         })
         .select()
         .single();
@@ -225,7 +326,7 @@ export default function CommunityPage() {
       }
 
       // 重置表单
-      setNewPost({ title: '', content: '', type: 'experience', image_url: null });
+      setNewPost({ title: '', content: '', type: 'experience', image_url: null, activity_time: '', activity_location: '', reward_credits: 0 });
       setSelectedImage(null);
       setIsCreatingPost(false);
       await fetchPosts();
@@ -507,6 +608,42 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
+                  {newPost.type === 'activity' && (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-3">
+                          <Label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">活动时间</Label>
+                          <Input 
+                            type="datetime-local" 
+                            value={newPost.activity_time} 
+                            onChange={e => setNewPost({...newPost, activity_time: e.target.value})} 
+                            className="rounded-xl h-14 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus-visible:ring-green-500/20 text-lg"
+                          />
+                        </div>
+                        <div className="space-y-3">
+                          <Label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">活动地点</Label>
+                          <Input 
+                            value={newPost.activity_location} 
+                            onChange={e => setNewPost({...newPost, activity_location: e.target.value})} 
+                            placeholder="输入活动地点"
+                            className="rounded-xl h-14 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus-visible:ring-green-500/20 text-lg"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">奖励积分</Label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={newPost.reward_credits} 
+                          onChange={e => setNewPost({...newPost, reward_credits: parseInt(e.target.value) || 0})} 
+                          placeholder="参与活动可获得的积分"
+                          className="rounded-xl h-14 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus-visible:ring-green-500/20 text-lg"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="pt-4">
                     <Button onClick={handleCreatePost} className="w-full py-8 rounded-2xl text-lg font-black shadow-xl shadow-green-500/20 bg-green-600 hover:bg-green-700 text-white active:scale-[0.98] transition-all">
                       发布内容
@@ -596,11 +733,11 @@ export default function CommunityPage() {
                         <div className="flex items-center gap-4">
                           <div className="relative">
                             <div className="h-14 w-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700">
-                              {post.user?.avatar_url ? (
-                                <img src={post.user.avatar_url} alt={post.user.username} className="h-full w-full object-cover" />
+                              {post.profiles?.avatar_url ? (
+                                <img src={post.profiles.avatar_url} alt={post.profiles.username} className="h-full w-full object-cover" />
                               ) : (
                                 <span className="text-xl font-black text-slate-400">
-                                  {post.user?.username?.charAt(0).toUpperCase() || 'U'}
+                                  {post.profiles?.username?.charAt(0).toUpperCase() || 'U'}
                                 </span>
                               )}
                             </div>
@@ -609,7 +746,7 @@ export default function CommunityPage() {
                           <div>
                             <CardTitle className="text-xl font-black text-slate-800 dark:text-slate-100 mb-1">{post.title}</CardTitle>
                             <div className="flex items-center gap-3 text-sm font-medium">
-                              <span className="text-slate-600 dark:text-slate-400">{post.user?.username || '匿名用户'}</span>
+                              <span className="text-slate-600 dark:text-slate-400">{post.profiles?.username || '匿名用户'}</span>
                               <span className="text-slate-300 dark:text-slate-700">•</span>
                               <span className="text-slate-400">{formatTimeAgo(post.created_at)}</span>
                               <Badge 
@@ -651,9 +788,33 @@ export default function CommunityPage() {
                             />
                           </div>
                         )}
+                        {post.type === 'activity' && (
+                          <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            {post.activity_time && (
+                              <div className="flex items-center gap-3 text-sm">
+                                <Calendar className="h-4 w-4 text-emerald-500" />
+                                <span className="text-slate-600 dark:text-slate-300">{new Date(post.activity_time).toLocaleString()}</span>
+                              </div>
+                            )}
+                            {post.activity_location && (
+                              <div className="flex items-center gap-3 text-sm">
+                                <Globe className="h-4 w-4 text-emerald-500" />
+                                <span className="text-slate-600 dark:text-slate-300">{post.activity_location}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3 text-sm">
+                              <Users className="h-4 w-4 text-emerald-500" />
+                              <span className="text-slate-600 dark:text-slate-300">{post.participant_count || 0} 人已报名</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm">
+                              <Sparkles className="h-4 w-4 text-yellow-500" />
+                              <span className="text-slate-600 dark:text-slate-300">参与奖励: {post.reward_credits || 0} 积分</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
-                    <CardFooter className="flex justify-end items-center border-t border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 py-4 px-8">
+                    <CardFooter className="flex justify-between items-center border-t border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 py-4 px-8">
                       <Button 
                         variant="ghost" 
                         size="sm" 
@@ -663,6 +824,31 @@ export default function CommunityPage() {
                         <MessageSquare className="h-4 w-4" />
                         <span>{comments.filter(c => c.post_id === post.id).length > 0 ? `${comments.filter(c => c.post_id === post.id).length} 条评论` : '发表评论'}</span>
                       </Button>
+                      {post.type === 'activity' && (
+                        <Button 
+                          size="sm" 
+                          className={`rounded-xl gap-2 transition-all font-bold h-10 px-6 ${participationStatus[post.id] === 'registered' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                          onClick={() => {
+                            if (participationStatus[post.id] === 'registered') {
+                              handleCancelParticipation(post.id);
+                            } else {
+                              handleParticipate(post.id);
+                            }
+                          }}
+                        >
+                          {participationStatus[post.id] === 'registered' ? (
+                            <>
+                              <Users className="h-4 w-4" />
+                              <span>取消报名</span>
+                            </>
+                          ) : (
+                            <>
+                              <Users className="h-4 w-4" />
+                              <span>报名参加</span>
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </CardFooter>
 
                     {/* Comments Section */}
@@ -679,15 +865,15 @@ export default function CommunityPage() {
                               {comments.map((comment) => (
                                 <div key={comment.id} className="flex gap-4 group">
                                   <div className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
-                                    {comment.user?.avatar_url ? (
-                                      <img src={comment.user.avatar_url} className="w-full h-full object-cover"/>
+                                    {comment.profiles?.avatar_url ? (
+                                      <img src={comment.profiles.avatar_url} className="w-full h-full object-cover"/>
                                     ) : (
-                                      <span className="font-black text-slate-400">{comment.user?.username?.charAt(0).toUpperCase()}</span>
+                                      <span className="font-black text-slate-400">{comment.profiles?.username?.charAt(0).toUpperCase()}</span>
                                     )}
                                   </div>
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
-                                      <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{comment.user?.username || '匿名用户'}</span>
+                                      <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{comment.profiles?.username || '匿名用户'}</span>
                                       <span className="text-xs text-slate-400 font-medium">{formatTimeAgo(comment.created_at)}</span>
                                       {user?.id === comment.user_id && (
                                         <button 

@@ -1,8 +1,9 @@
 import { siliconFlow } from '../siliconflow';
+import { enhanceAIResponse } from './knowledge';
 
 export async function getChatResponse(
   messages: Array<{
-    role: 'system' | 'user' | 'assistant';
+    role: string;
     content: string;
   }>,
   model: string = process.env.NEXT_PUBLIC_DEFAULT_CHAT_MODEL || 'Pro/zai-org/GLM-5',
@@ -11,27 +12,48 @@ export async function getChatResponse(
     temperature?: number;
   }
 ) {
+  // 类型转换，确保role是有效的值
+  const validatedMessages = messages.map(msg => ({
+    ...msg,
+    role: msg.role as 'system' | 'user' | 'assistant'
+  }));
+
   const response = await siliconFlow.chatCompletion({
     model,
-    messages,
+    messages: validatedMessages,
     max_tokens: options?.max_tokens || 1000,
     temperature: options?.temperature || 0.7,
   });
 
-  return response.choices[0].message.content;
+  let content = response.choices[0].message.content;
+  
+  // 去除**和###等符号
+  content = content.replace(/\*\*/g, '');
+  content = content.replace(/###/g, '');
+  
+  return content;
 }
 
 export async function getEcoAdvice(question: string) {
-  return getChatResponse([
+  // 获取增强提示
+  const enhancedPrompt = await enhanceAIResponse(question);
+  
+  // 构建系统提示
+  const systemPrompt = '你是一个专业的环保顾问，拥有丰富的环保知识和实践经验。请以友好、专业的语气回答用户关于环保的问题，提供准确、实用的建议。';
+  
+  // 构建完整的消息数组
+  const messages = [
     {
       role: 'system',
-      content: '你是一个专业的环保顾问，拥有丰富的环保知识和实践经验。请以友好、专业的语气回答用户关于环保的问题，提供准确、实用的建议。',
+      content: systemPrompt + (enhancedPrompt ? '\n\n' + enhancedPrompt : ''),
     },
     {
       role: 'user',
       content: question,
     },
-  ]);
+  ];
+  
+  return getChatResponse(messages);
 }
 
 export async function generateReductionTips(carbonData: {

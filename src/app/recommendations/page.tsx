@@ -649,7 +649,7 @@ export default function RecommendationsPage() {
                             积分分析与建议
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="relative z-10">
+                        <CardContent className="relative z-10 max-h-[400px] overflow-y-auto pr-2">
                           <div className="prose prose-slate dark:prose-invert max-w-none">
                             <div className="whitespace-pre-line text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
                               {creditAnalysis}

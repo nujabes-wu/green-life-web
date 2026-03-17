@@ -32,7 +32,13 @@ export async function analyzeImage(
     temperature: options?.temperature || 0.3,
   });
 
-  return response.choices[0].message.content;
+  let content = response.choices[0].message.content;
+  
+  // 去除**和###等符号
+  content = content.replace(/\*\*/g, '');
+  content = content.replace(/###/g, '');
+  
+  return content;
 }
 
 export async function analyzeRecyclingItem(imageUrl: string) {

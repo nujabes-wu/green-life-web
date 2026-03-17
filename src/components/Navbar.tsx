@@ -29,12 +29,12 @@ export function Navbar() {
           <div className="relative h-10 w-10 bg-white rounded-full group-hover:bg-accent-warm transition-colors duration-300 shadow-sm overflow-hidden flex items-center justify-center">
             <Image 
               src="/logo.svg" 
-              alt="绿色生活 Logo" 
+              alt="Eco Moment Logo" 
               fill 
               className="object-contain scale-125 transition-transform duration-500 group-hover:scale-150"
             />
           </div>
-          <span className="tracking-tight">绿色生活</span>
+          <span className="tracking-tight">Eco Moment</span>
         </Link>
         
         {/* Desktop Nav */}

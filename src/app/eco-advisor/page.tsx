@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Bot, User, Loader2, Trash2, Paperclip, Image as ImageIcon, Sparkles, Lightbulb, Zap, Leaf, CheckCircle2 } from 'lucide-react';
+import { Send, Bot, User, Loader2, Trash2, Paperclip, Image as ImageIcon, Sparkles, Lightbulb, Zap, Leaf, CheckCircle2, History, Clock, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEcoAdvice } from "@/lib/ai/chat";
 import { analyzeImage } from "@/lib/ai/image";
@@ -21,6 +21,14 @@ interface Message {
   imageUrl?: string;
 }
 
+// 定义对话会话类型
+interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  lastUpdated: Date;
+}
+
 export default function EcoAdvisorPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -30,6 +38,9 @@ export default function EcoAdvisorPage() {
       timestamp: new Date(),
     },
   ]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string>('');
+  const [showHistory, setShowHistory] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -42,14 +53,119 @@ export default function EcoAdvisorPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // 从本地存储加载对话历史
   useEffect(() => {
-    scrollToBottom();
+    const savedConversations = localStorage.getItem('ecoAdvisorConversations');
+    if (savedConversations) {
+      const parsedConversations = JSON.parse(savedConversations, (key, value) => {
+        if (key === 'timestamp' || key === 'lastUpdated') {
+          return new Date(value);
+        }
+        return value;
+      });
+      setConversations(parsedConversations);
+    }
+  }, []);
+
+  // 保存对话历史到本地存储
+  useEffect(() => {
+    if (messages.length > 1) { // 跳过初始消息
+      const updatedConversations = conversations.map(conv => 
+        conv.id === currentConversationId 
+          ? { ...conv, messages, lastUpdated: new Date() }
+          : conv
+      );
+      
+      if (currentConversationId) {
+        localStorage.setItem('ecoAdvisorConversations', JSON.stringify(updatedConversations));
+      }
+    }
+  }, [messages, conversations, currentConversationId]);
+
+  // 只在消息更新时滚动，页面加载时不滚动
+  useEffect(() => {
+    // 检查是否是页面加载时的初始消息
+    if (messages.length > 1 || isTyping) {
+      scrollToBottom();
+    }
   }, [messages, isTyping]);
+
+  // 创建新对话
+  const createNewConversation = () => {
+    const newConversationId = Date.now().toString();
+    const newMessages: Message[] = [
+      {
+        id: '1',
+        role: 'assistant',
+        content: '你好！我是你的AI环保顾问。请问有什么环保相关的问题需要咨询？我可以帮你了解环保知识、提供减排建议、解答回收问题等。',
+        timestamp: new Date(),
+      },
+    ];
+    
+    const newConversation: Conversation = {
+      id: newConversationId,
+      title: '新对话',
+      messages: newMessages,
+      lastUpdated: new Date(),
+    };
+    
+    setMessages(newMessages);
+    setCurrentConversationId(newConversationId);
+    setConversations(prev => [newConversation, ...prev]);
+    setShowHistory(false);
+  };
+
+  // 切换对话
+  const switchConversation = (conversation: Conversation) => {
+    setMessages(conversation.messages);
+    setCurrentConversationId(conversation.id);
+    setShowHistory(false);
+  };
+
+  // 删除对话
+  const deleteConversation = (conversationId: string) => {
+    if (currentConversationId === conversationId) {
+      createNewConversation();
+    }
+    setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+  };
+
+  // 更新对话标题
+  const updateConversationTitle = (conversationId: string, title: string) => {
+    setConversations(prev => prev.map(conv => 
+      conv.id === conversationId 
+        ? { ...conv, title }
+        : conv
+    ));
+  };
 
   // 发送消息
   const sendMessage = async (text?: string) => {
     const messageText = text || inputValue.trim();
     if (!messageText && !imageUrl) return;
+
+    // 如果没有当前对话ID，创建新对话
+    if (!currentConversationId) {
+      const newConversationId = Date.now().toString();
+      const newMessages: Message[] = [
+        {
+          id: '1',
+          role: 'assistant',
+          content: '你好！我是你的AI环保顾问。请问有什么环保相关的问题需要咨询？我可以帮你了解环保知识、提供减排建议、解答回收问题等。',
+          timestamp: new Date(),
+        },
+      ];
+      
+      const newConversation: Conversation = {
+        id: newConversationId,
+        title: messageText.length > 20 ? messageText.substring(0, 20) + '...' : messageText,
+        messages: newMessages,
+        lastUpdated: new Date(),
+      };
+      
+      setCurrentConversationId(newConversationId);
+      setConversations(prev => [newConversation, ...prev]);
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -86,6 +202,12 @@ export default function EcoAdvisorPage() {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // 更新对话标题（如果是第一条用户消息）
+      if (messages.length === 1) {
+        updateConversationTitle(currentConversationId, messageText.length > 20 ? messageText.substring(0, 20) + '...' : messageText);
+      }
+      
       setBotEmotion('happy');
     } catch (error) {
       console.error('Error getting eco advice:', error);
@@ -121,14 +243,7 @@ export default function EcoAdvisorPage() {
 
   // 清除所有消息
   const clearMessages = () => {
-    setMessages([
-      {
-        id: '1',
-        role: 'assistant',
-        content: '你好！我是你的AI环保顾问。请问有什么环保相关的问题需要咨询？我可以帮你了解环保知识、提供减排建议、解答回收问题等。',
-        timestamp: new Date(),
-      },
-    ]);
+    createNewConversation();
   };
 
   return (
@@ -197,10 +312,91 @@ export default function EcoAdvisorPage() {
                       </CardDescription>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={clearMessages} className="text-muted-foreground hover:text-destructive transition-colors">
-                    <Trash2 className="h-5 w-5" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setShowHistory(!showHistory)}
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <History className="h-5 w-5" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={createNewConversation}
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={clearMessages} 
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                  </div>
                 </div>
+                
+                {/* 对话历史 */}
+                <AnimatePresence>
+                  {showHistory && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="border-t border-muted/30 py-4"
+                    >
+                      <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        对话历史
+                      </h4>
+                      <ScrollArea className="h-60 pr-2">
+                        <div className="space-y-2">
+                          {conversations.length > 0 ? (
+                            conversations.map((conv) => (
+                              <motion.div
+                                key={conv.id}
+                                whileHover={{ scale: 1.01 }}
+                                className={`p-3 rounded-lg cursor-pointer transition-colors ${currentConversationId === conv.id ? 'bg-primary/10 border border-primary/20' : 'bg-muted/20 hover:bg-muted/40'}`}
+                                onClick={() => switchConversation(conv)}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1 min-w-0">
+                                    <h5 className="font-medium text-sm truncate">{conv.title}</h5>
+                                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                                      {conv.messages.length > 1 ? conv.messages[1].content.substring(0, 40) + '...' : '新对话'}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">
+                                      {conv.lastUpdated.toLocaleDateString()}
+                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteConversation(conv.id);
+                                      }}
+                                      className="text-muted-foreground hover:text-destructive transition-colors"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            ))
+                          ) : (
+                            <div className="text-center py-8 text-muted-foreground text-sm">
+                              暂无对话历史
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </CardHeader>
               
               <CardContent className="flex-1 overflow-hidden p-0 flex flex-col">

@@ -149,26 +149,7 @@ export default function Home() {
                   </Link>
                 </div>
 
-                {/* Stats Preview - Keeping it consistent across slides but animating entry */}
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 1, delay: 0.5 }}
-                  className="pt-8 flex items-center gap-8 text-slate-400 dark:text-slate-500 text-sm font-medium"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex -space-x-2">
-                      {[1,2,3].map(i => (
-                        <div key={i} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white dark:border-slate-900" />
-                      ))}
-                    </div>
-                    <span>10k+ 用户已加入</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4" />
-                    <span>覆盖 50+ 城市</span>
-                  </div>
-                </motion.div>
+
               </motion.div>
             </AnimatePresence>
 

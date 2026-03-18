@@ -627,7 +627,8 @@ export default function ProfilePage() {
           product_id: item.product_id,
           title: item.title,
           price: typeof item.price === 'string' ? parseFloat(item.price.replace('¥', '')) : item.price,
-          quantity: item.quantity
+          quantity: item.quantity,
+          image_url: item.image_url
         });
       
       if (itemError) {
@@ -913,37 +914,19 @@ export default function ProfilePage() {
         return;
       }
 
-      // 创建订单（使用买家ID作为user_id，这样订单会出现在买家的订单列表中）
-      const { data: orderData, error: orderError } = await supabase
-        .from('user_orders')
-        .insert({
-          user_id: request.buyer_id,
-          total_amount: itemData.price_cny,
-          status: '已完成'
-        })
-        .select()
-        .single();
+      // 添加到买家购物车
+      const { error: cartError } = await supabase.rpc('add_to_buyer_cart', {
+        p_buyer_id: request.buyer_id,
+        p_product_id: itemData.id,
+        p_product_type: 'marketplace',
+        p_title: itemData.title,
+        p_price: itemData.price_cny,
+        p_image_url: itemData.image_url
+      });
 
-      if (orderError) {
-        console.error('Error creating order:', orderError);
-        toast.error('创建订单失败');
-        return;
-      }
-
-      // 创建订单项
-      const { error: itemError2 } = await supabase
-        .from('order_items')
-        .insert({
-          order_id: orderData.id,
-          product_id: itemData.id,
-          title: itemData.title,
-          price: itemData.price_cny,
-          quantity: 1
-        });
-
-      if (itemError2) {
-        console.error('Error creating order item:', itemError2);
-        toast.error('创建订单项失败');
+      if (cartError) {
+        console.error('Error adding to cart:', cartError);
+        toast.error('添加到购物车失败');
         return;
       }
 
@@ -958,7 +941,11 @@ export default function ProfilePage() {
       }
 
       // 发送订单给买家
-      toast.success('交易已接受，商品已添加到买家订单');
+      toast.success('交易已接受，商品已添加到买家购物车');
+      
+      // 发送通知给买家
+      toast.success('商品已成功添加到您的购物车');
+      
       await fetchTradeRequests();
     } catch (err) {
       console.error('Exception accepting trade:', err);
